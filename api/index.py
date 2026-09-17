@@ -9,6 +9,12 @@ from passlib.hash import pbkdf2_sha256
 import secrets
 import time
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except Exception:
+    pass
+
 # --- CONFIG ---
 app = Flask(__name__)
 # Increase max content length to 10MB to handle image uploads better on Vercel
