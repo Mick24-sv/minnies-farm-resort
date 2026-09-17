@@ -33,10 +33,15 @@ def initialize_app(app):
     if not _jwt_secret:
         raise RuntimeError("JWT_SECRET_KEY environment variable is required")
     app.config["JWT_SECRET_KEY"] = _jwt_secret
-    app.config["UPLOAD_FOLDER"] = os.path.join(os.getcwd(), "uploads")
     
-    if not os.path.exists(app.config["UPLOAD_FOLDER"]):
-        os.makedirs(app.config["UPLOAD_FOLDER"])
+    # Skip filesystem operations on Vercel (read-only filesystem)
+    if not os.getenv('VERCEL'):
+        app.config["UPLOAD_FOLDER"] = os.path.join(os.getcwd(), "uploads")
+        if not os.path.exists(app.config["UPLOAD_FOLDER"]):
+            os.makedirs(app.config["UPLOAD_FOLDER"])
+    else:
+        # Use /tmp for Vercel if needed
+        app.config["UPLOAD_FOLDER"] = "/tmp"
 
     # Initialize extensions safely
     try:
