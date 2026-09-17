@@ -1,1 +1,8 @@
-requirements.txt
+minnies-farm-backend/
+__pycache__/
+*.pyc
+.env
+.env.*
+.git
+.vscode
+uploads/

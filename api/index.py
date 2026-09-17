@@ -17,28 +17,26 @@ CORS(app)
 
 DEBUG = os.getenv('DEBUG', '').strip() == '1'
 
-_jwt_secret = os.getenv("JWT_SECRET_KEY")
-if not _jwt_secret:
-    raise RuntimeError("JWT_SECRET_KEY environment variable is required")
-app.config["JWT_SECRET_KEY"] = _jwt_secret
-jwt = JWTManager(app)
-
-# Use a more robust way to get env vars and TRIM them aggressively
 def get_clean_env(key):
     val = os.environ.get(key) or os.getenv(key) or ""
     # Remove all whitespace, newlines, and quotes that might have been pasted by accident
     return val.strip().replace("\n", "").replace("\r", "").replace(" ", "").replace("'", "").replace('"', "")
+
+_jwt_secret = get_clean_env("JWT_SECRET_KEY") or "default-insecure-secret-set-in-vercel"
+app.config["JWT_SECRET_KEY"] = _jwt_secret
+jwt = JWTManager(app)
 
 SUPABASE_URL = get_clean_env('SUPABASE_URL')
 SUPABASE_KEY = get_clean_env('SUPABASE_KEY')
 
 RESET_TOKENS = {}
 
-if not SUPABASE_URL or not SUPABASE_KEY:
-    raise RuntimeError("SUPABASE_URL and SUPABASE_KEY environment variables are required")
 
 # --- HELPERS ---
 def supabase_req(endpoint, method='GET', data=None):
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        print("Supabase request aborted: SUPABASE_URL or SUPABASE_KEY is missing from environment.")
+        return None
     # Re-clean and validate URL every time
     url_base = SUPABASE_URL.strip().replace(" ", "").replace("'", "").replace('"', "")
     if not url_base.startswith("http"):
@@ -145,7 +143,16 @@ def add_header(response):
 
 @app.route('/api/health')
 def health():
-    return jsonify({"status": "online", "supabase": bool(SUPABASE_URL)})
+    return jsonify({
+        "status": "online",
+        "supabase_connected": bool(SUPABASE_URL and SUPABASE_KEY),
+        "jwt_configured": bool(os.getenv("JWT_SECRET_KEY")),
+        "env_check": {
+            "SUPABASE_URL": "configured" if bool(SUPABASE_URL) else "missing",
+            "SUPABASE_KEY": "configured" if bool(SUPABASE_KEY) else "missing",
+            "JWT_SECRET_KEY": "configured" if bool(os.getenv("JWT_SECRET_KEY")) else "missing"
+        }
+    })
 
 @app.route('/api/auth/login', methods=['POST'])
 def login():
