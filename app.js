@@ -566,9 +566,6 @@ const __app = createApp({
         loading.value = false;
       }
     }
-      }
-      loading.value = false;
-    }
 
     async function fetchUserBookings() {
       if (!token.value || !currentUser.value) return;
