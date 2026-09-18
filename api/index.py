@@ -658,6 +658,7 @@ def create_checkout_session():
         base_url = os.getenv('FRONTEND_URL') or request.host_url
         checkout_session = stripe.checkout.Session.create(
             mode='payment',
+            payment_method_types=['card', 'gcash'],
             line_items=[{
                 'price_data': {
                     'currency': 'php',
