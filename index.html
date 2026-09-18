@@ -811,6 +811,18 @@
           <div class="value-card"><div class="value-icon">👨‍👩‍👧</div><div class="value-title">Family-Owned</div><div class="value-desc">Every decision is made with heart. As a family business, we put people before profit, always.</div></div>
         </div>
       </div>
+      <div class="about-section">
+        <div class="divider-title"><h2>Meet the Team</h2><p>The passionate people behind Minnie's Farm Resort</p></div>
+        <div class="team-grid">
+          <div class="team-card" v-for="member in teamMembers" :key="member.name">
+            <img v-if="member.photo" :src="member.photo" class="team-photo" crossorigin="anonymous" referrerpolicy="no-referrer" />
+            <div v-else class="team-avatar" :style="{background: member.color}">{{ member.initials }}</div>
+            <div class="team-name">{{ member.name }}</div>
+            <div class="team-role">{{ member.role }}</div>
+            <div class="team-desc">{{ member.desc }}</div>
+          </div>
+        </div>
+      </div>
       <div class="about-section" style="text-align:center">
         <div style="background:linear-gradient(135deg,#2d4a1e,#4a7c3f);border-radius:20px;padding:3.5rem 2rem;color:var(--white)">
           <div style="font-size:2.5rem;margin-bottom:1rem">🌾</div>

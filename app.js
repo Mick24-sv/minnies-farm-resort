@@ -256,6 +256,11 @@ const __app = createApp({
       { icon: '📅', title: 'Easy Booking', desc: 'Real-time availability checks and instant confirmation for a hassle-free experience.' },
     ];
 
+    const teamMembers = [
+      { name: 'Maximana Morales', initials: 'MM', role: 'Founder & Owner', photo: 'https://i.imgur.com/WOf3fU3.jpg', desc: 'The heart of the resort. Maximana turned her family farm into a beloved getaway with warmth and determination.', color: 'linear-gradient(135deg,#4a7c3f,#2d4a1e)' },
+      { name: 'Mick Daniel Morales', initials: 'MD', role: 'Fullstack Developer', photo: 'https://i.imgur.com/izbkYqi.jpg', desc: "Designed and built the resort's booking interface with Vue.js for a smooth guest experience.", color: 'linear-gradient(135deg,#2d6a5f,#1a2e2a)' },
+    ];
+
     const faqs = ref([
       { q: 'Do I need to book in advance for day entrance?', a: 'No reservation needed! Just walk in and pay the ₱100 entrance fee at the gate. However, during peak seasons and holidays, we recommend arriving early as capacity may be limited.', open: false },
       { q: 'Can I book the karaoke room on the same day?', a: "Yes! You can walk in and use the karaoke room if it's available. But on weekends and holidays, we highly recommend reserving in advance to secure your slot.", open: false },
@@ -1230,7 +1235,7 @@ const __app = createApp({
     return {
       page, authTab, dashTab, authMsg, authMsgType, authMsgKey, showRoomModal, editingRoom, loading, mobileMenuOpen,
       today, currentUser, token, loginForm, regForm, showLoginPw, showRegPw, showRegConfirmPw, rooms, filters, selectedRoom,
-      bookingForm, roomForm, lastBooking, allBookings, features, faqs,
+      bookingForm, roomForm, lastBooking, allBookings, features, teamMembers, faqs,
       filteredRooms, bookingNights, bookingTotal, upcomingBookings, pastBookings,
       navigate, doLogin, doRegister, logout, googleLogin, doForgotPassword, doResetPassword,
       showForgotPassword, forgotEmail, forgotMsg, forgotMsgType,
