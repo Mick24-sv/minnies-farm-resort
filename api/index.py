@@ -21,6 +21,25 @@ app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024
 CORS(app)
 
+class VercelPathMiddleware:
+    """WSGI middleware to restore original request path from Vercel rewrite parameter"""
+    def __init__(self, wsgi_app):
+        self.wsgi_app = wsgi_app
+
+    def __call__(self, environ, start_response):
+        query_string = environ.get('QUERY_STRING', '')
+        if '__path=' in query_string:
+            import urllib.parse
+            params = urllib.parse.parse_qs(query_string)
+            if '__path' in params and params['__path'][0]:
+                orig_path = params['__path'][0]
+                if not orig_path.startswith('/'):
+                    orig_path = '/' + orig_path
+                environ['PATH_INFO'] = orig_path
+        return self.wsgi_app(environ, start_response)
+
+app.wsgi_app = VercelPathMiddleware(app.wsgi_app)
+
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 if not os.path.exists(os.path.join(ROOT_DIR, 'index.html')):
     ROOT_DIR = os.getcwd()
@@ -993,18 +1012,9 @@ def upload_image():
 def serve_index():
     return send_from_directory(ROOT_DIR, 'index.html')
 
-@app.route('/api/index.py')
-@app.route('/api/index')
-def debug_vercel_rewrite():
-    return jsonify({
-        "path": request.path,
-        "url": request.url,
-        "headers": {k: v for k, v in request.headers.items() if 'auth' not in k.lower() and 'key' not in k.lower()}
-    })
-
 @app.route('/<path:path>')
 def serve_static(path):
-    if path in ('api/index.py', 'api/index', 'index.html'):
+    if path in ('index.html', ''):
         return send_from_directory(ROOT_DIR, 'index.html')
     file_path = os.path.join(ROOT_DIR, path)
     if os.path.isfile(file_path):
