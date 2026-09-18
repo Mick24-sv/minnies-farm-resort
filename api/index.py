@@ -2,7 +2,7 @@ import os
 import sys
 import json
 import requests
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
 from passlib.hash import pbkdf2_sha256
@@ -20,6 +20,10 @@ app = Flask(__name__)
 # Increase max content length to 10MB to handle image uploads better on Vercel
 app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024
 CORS(app)
+
+ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+if not os.path.exists(os.path.join(ROOT_DIR, 'index.html')):
+    ROOT_DIR = os.getcwd()
 
 DEBUG = os.getenv('DEBUG', '').strip() == '1'
 
@@ -982,6 +986,21 @@ def upload_image():
         }), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+# --- FRONTEND STATIC & SPA FALLBACK ROUTES ---
+@app.route('/')
+@app.route('/index.html')
+def serve_index():
+    return send_from_directory(ROOT_DIR, 'index.html')
+
+@app.route('/<path:path>')
+def serve_static(path):
+    if path.startswith('api/'):
+        return jsonify({"error": "API route not found"}), 404
+    file_path = os.path.join(ROOT_DIR, path)
+    if os.path.isfile(file_path):
+        return send_from_directory(ROOT_DIR, path)
+    return send_from_directory(ROOT_DIR, 'index.html')
 
 # Vercel entry point
 handler = app

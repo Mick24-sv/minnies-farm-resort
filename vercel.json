@@ -7,7 +7,7 @@
     },
     {
       "source": "/(.*)",
-      "destination": "/index.html"
+      "destination": "/api/index.py"
     }
   ],
   "functions": {
