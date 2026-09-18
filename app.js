@@ -516,11 +516,18 @@ const __app = createApp({
     }
 
     // ── BOOKINGS ─────────────────────────────────────────
+    function clearSessionAndGoToAuth(message = 'Your session expired. Please log in again.') {
+      currentUser.value = null;
+      token.value = '';
+      try { localStorage.removeItem('token'); } catch (e) {}
+      showToast(message, 'error');
+      navigate('auth');
+    }
+
     async function doBook() {
-      if (!currentUser.value) { 
-        showToast('Please login to book a room! 🔐', 'info');
-        navigate('auth'); 
-        return; 
+      if (!currentUser.value || !token.value) {
+        clearSessionAndGoToAuth('Please log in to continue booking. 🔐');
+        return;
       }
       if (bookingNights.value <= 0) {
         showToast('Please select valid dates! 📅', 'error');
@@ -542,6 +549,11 @@ const __app = createApp({
             user_id: currentUser.value.id
           })
         });
+
+        if (xenditRes.status === 401) {
+          clearSessionAndGoToAuth('Your session expired while booking. Please log in again.');
+          return;
+        }
 
         const xenditData = await xenditRes.json().catch(() => ({}));
         if (xenditRes.ok && xenditData.invoice_url) {
