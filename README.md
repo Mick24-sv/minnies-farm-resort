@@ -1,5 +1,7 @@
 # Minnie's Farm Resort — Website (Vue + Flask on Vercel + Supabase)
 
+Hi, I'm Mick — a full-stack developer focused on building practical web apps for real businesses. I design and develop modern booking systems, customer-facing interfaces, and backend services that make operations smoother and more efficient.
+
 This repository contains the **Minnie's Farm Resort** room booking website.
 
 - **Frontend:** Static HTML/CSS + Vue (loaded via `index.html`, logic in `app.js`)

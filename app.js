@@ -256,13 +256,6 @@ const __app = createApp({
       { icon: '📅', title: 'Easy Booking', desc: 'Real-time availability checks and instant confirmation for a hassle-free experience.' },
     ];
 
-    const teamMembers = [
-      { name: 'Maximina Cortez Morales', initials: 'MM', role: 'Founder & Owner', photo: 'https://i.imgur.com/WOf3fU3.jpg', desc: 'The heart of the resort. Minnie turned her family farm into a beloved getaway with warmth and determination.', color: 'linear-gradient(135deg,#4a7c3f,#2d4a1e)' },
-      { name: 'Mick Daniel Morales', initials: 'MD', role: 'Fullstack Developer', photo: 'https://i.imgur.com/izbkYqi.jpg', desc: "Designed and built the resort's booking interface with Vue.js for a smooth guest experience.", color: 'linear-gradient(135deg,#2d6a5f,#1a2e2a)' },
-      { name: 'Kian Antonio', initials: 'KA', role: 'Backend Developer', photo: 'https://i.imgur.com/yiCAiZh.jpg', desc: 'Built the Flask API powering all reservations, authentication, and room management logic.', color: 'linear-gradient(135deg,#c9a84c,#8a6a1a)' },
-      { name: 'Curt Aldre Olila', initials: 'CA', role: 'Database Developer', photo: null, desc: 'Designed the PostgreSQL schema ensuring data integrity and fast availability queries.', color: 'linear-gradient(135deg,#5a3a7c,#2d1a4a)' },
-    ];
-
     const faqs = ref([
       { q: 'Do I need to book in advance for day entrance?', a: 'No reservation needed! Just walk in and pay the ₱100 entrance fee at the gate. However, during peak seasons and holidays, we recommend arriving early as capacity may be limited.', open: false },
       { q: 'Can I book the karaoke room on the same day?', a: "Yes! You can walk in and use the karaoke room if it's available. But on weekends and holidays, we highly recommend reserving in advance to secure your slot.", open: false },
@@ -1237,7 +1230,7 @@ const __app = createApp({
     return {
       page, authTab, dashTab, authMsg, authMsgType, authMsgKey, showRoomModal, editingRoom, loading, mobileMenuOpen,
       today, currentUser, token, loginForm, regForm, showLoginPw, showRegPw, showRegConfirmPw, rooms, filters, selectedRoom,
-      bookingForm, roomForm, lastBooking, allBookings, features, teamMembers, faqs,
+      bookingForm, roomForm, lastBooking, allBookings, features, faqs,
       filteredRooms, bookingNights, bookingTotal, upcomingBookings, pastBookings,
       navigate, doLogin, doRegister, logout, googleLogin, doForgotPassword, doResetPassword,
       showForgotPassword, forgotEmail, forgotMsg, forgotMsgType,
