@@ -377,7 +377,7 @@
         <template v-if="!servicesLoading && services && services.length">
           <div class="service-card" v-for="s in services" :key="s.id">
             <div class="service-card-header" :style="{ background: s.name.includes('Entrance') ? 'url(https://i.imgur.com/2UDN3qi.jpg) center/cover' : (s.name.includes('Karaoke') ? 'url(https://i.imgur.com/taAWIUe.jpg) center/cover' : 'linear-gradient(135deg,#2d4a1e,#4a7c3f)') }">
-              <span class="service-card-icon">{{ s.name.includes('Entrance') ?  : (s.name.includes('Karaoke') ?  : ) }}</span>
+              <span class="service-card-icon">{{ s.name.includes('Entrance') ? '🌿' : (s.name.includes('Karaoke') ? '🎤' : '🎁') }}</span>
               <div class="service-card-name">{{ s.name }}</div>
               <div class="service-card-tagline">{{ s.description }}</div>
             </div>
