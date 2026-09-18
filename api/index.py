@@ -2,6 +2,7 @@ import os
 import sys
 import json
 import requests
+import stripe
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
@@ -57,6 +58,11 @@ jwt = JWTManager(app)
 
 SUPABASE_URL = get_clean_env('SUPABASE_URL')
 SUPABASE_KEY = get_clean_env('SUPABASE_KEY')
+STRIPE_SECRET_KEY = get_clean_env('STRIPE_SECRET_KEY')
+STRIPE_WEBHOOK_SECRET = get_clean_env('STRIPE_WEBHOOK_SECRET')
+
+if STRIPE_SECRET_KEY:
+    stripe.api_key = STRIPE_SECRET_KEY
 
 RESET_TOKENS = {}
 
@@ -613,6 +619,121 @@ def handle_bookings():
     except Exception as e:
         print(f"DEBUG: Error in handle_bookings: {str(e)}", flush=True)
         return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/payments/checkout-session', methods=['POST'])
+def create_checkout_session():
+    try:
+        user = _get_user_from_request()
+        if not user:
+            return jsonify({"error": "Unauthorized"}), 401
+
+        if not STRIPE_SECRET_KEY:
+            return jsonify({"error": "Stripe is not configured on this server."}), 500
+
+        data = request.get_json() or {}
+        room_id = data.get('room_id')
+        if not room_id:
+            return jsonify({"error": "room_id is required."}), 400
+
+        room_res = supabase_req(f'rooms?id=eq.{room_id}&select=*')
+        if not room_res:
+            return jsonify({"error": "Room not found."}), 404
+        room = room_res[0]
+
+        from datetime import date
+        try:
+            ci = date.fromisoformat(data.get('check_in_date') or data.get('checkIn') or data.get('check_in'))
+            co = date.fromisoformat(data.get('check_out_date') or data.get('checkOut') or data.get('check_out'))
+            nights = (co - ci).days
+            if nights <= 0:
+                nights = 1
+        except Exception:
+            return jsonify({"error": "Invalid booking dates."}), 400
+
+        price_per_night = float(room.get('price_per_night', 0) or 0)
+        subtotal = price_per_night * nights
+        total_price = round(subtotal + (subtotal * 0.10), 2)
+
+        base_url = os.getenv('FRONTEND_URL') or request.host_url
+        checkout_session = stripe.checkout.Session.create(
+            mode='payment',
+            line_items=[{
+                'price_data': {
+                    'currency': 'php',
+                    'unit_amount': int(total_price * 100),
+                    'product_data': {
+                        'name': f"{room.get('name', 'Room')} booking",
+                        'description': f"{ci.isoformat()} to {co.isoformat()}"
+                    }
+                },
+                'quantity': 1
+            }],
+            metadata={
+                'room_id': str(room_id),
+                'user_id': str(user.get('id')),
+                'check_in': ci.isoformat(),
+                'check_out': co.isoformat(),
+                'guest_count': str(int(data.get('num_guests') or data.get('guest_count') or data.get('guests') or 1)),
+                'total_price': str(total_price)
+            },
+            success_url=f"{base_url}dashboard?payment=success&session_id={{CHECKOUT_SESSION_ID}}",
+            cancel_url=f"{base_url}rooms?payment=cancelled"
+        )
+
+        return jsonify({
+            "message": "Checkout session created.",
+            "url": checkout_session.url,
+            "session_id": checkout_session.id,
+            "total_price": total_price,
+            "room": room.get('name')
+        }), 200
+    except Exception as e:
+        print(f"Stripe checkout error: {e}", flush=True)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/payments/webhook', methods=['POST'])
+def stripe_webhook():
+    payload = request.get_data()
+    sig_header = request.headers.get('Stripe-Signature')
+
+    if not STRIPE_WEBHOOK_SECRET:
+        return jsonify({"error": "Webhook secret missing."}), 500
+
+    try:
+        event = stripe.Webhook.construct_event(payload, sig_header, STRIPE_WEBHOOK_SECRET)
+    except ValueError:
+        return jsonify({"error": "Invalid payload."}), 400
+    except stripe.error.SignatureVerificationError:
+        return jsonify({"error": "Invalid signature."}), 400
+
+    if event['type'] == 'checkout.session.completed':
+        session = event['data']['object']
+        metadata = session.get('metadata', {}) or {}
+        room_id = metadata.get('room_id')
+        user_id = metadata.get('user_id')
+        check_in = metadata.get('check_in')
+        check_out = metadata.get('check_out')
+        guest_count = metadata.get('guest_count', '1')
+        total_price = float(metadata.get('total_price', 0) or 0)
+
+        if room_id and user_id and check_in and check_out:
+            existing = supabase_req(f'bookings?user_id=eq.{user_id}&room_id=eq.{room_id}&check_in=eq.{check_in}&check_out=eq.{check_out}&select=*')
+            if not existing:
+                supabase_req('bookings', method='POST', data={
+                    'user_id': int(user_id),
+                    'room_id': int(room_id),
+                    'check_in': check_in,
+                    'check_out': check_out,
+                    'guest_count': int(guest_count),
+                    'total_price': total_price,
+                    'status': 'confirmed',
+                    'payment_status': 'paid',
+                    'stripe_session_id': session.get('id')
+                })
+
+    return jsonify({"received": True}), 200
 
 
 @app.route('/api/bookings/<booking_id>/status', methods=['PUT'])
