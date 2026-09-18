@@ -234,7 +234,6 @@ def create_xendit_invoice():
         subtotal = price_per_night * nights
         total_price = round(subtotal + (subtotal * 0.10), 2)
 
-        base_url = os.getenv('FRONTEND_URL') or request.host_url
         external_id = f"booking-{room_id}-{int(time.time())}"
         payload = build_xendit_invoice_payload(
             external_id=external_id,
@@ -273,6 +272,48 @@ def create_xendit_invoice():
     except Exception as e:
         print(f"Xendit invoice error: {e}", flush=True)
         return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/payments/xendit/webhook', methods=['POST'])
+def xendit_webhook():
+    callback_token = request.headers.get('x-callback-token') or request.headers.get('X-CALLBACK-TOKEN')
+    if XENDIT_WEBHOOK_TOKEN and callback_token != XENDIT_WEBHOOK_TOKEN:
+        return jsonify({"error": "Invalid callback token"}), 401
+
+    payload = request.get_json(silent=True) or {}
+    invoice = payload.get('data') or payload.get('invoice') or payload
+    status = str(invoice.get('status') or payload.get('status') or '').upper()
+
+    if status != 'PAID':
+        return jsonify({"received": True}), 200
+
+    metadata = invoice.get('metadata') or {}
+    room_id = metadata.get('room_id')
+    user_id = metadata.get('user_id')
+    check_in = metadata.get('check_in')
+    check_out = metadata.get('check_out')
+    guest_count = metadata.get('guest_count', '1')
+    total_price = float(metadata.get('total_price', 0) or 0)
+
+    if room_id and user_id and check_in and check_out:
+        booking_payload = {
+            'user_id': int(user_id),
+            'room_id': int(room_id),
+            'check_in': check_in,
+            'check_out': check_out,
+            'guest_count': int(guest_count),
+            'total_price': total_price,
+            'status': 'confirmed',
+            'payment_status': 'paid',
+            'xendit_invoice_id': invoice.get('id')
+        }
+        existing = supabase_req(f'bookings?user_id=eq.{user_id}&room_id=eq.{room_id}&check_in=eq.{check_in}&check_out=eq.{check_out}&select=*')
+        if existing:
+            supabase_req(f'bookings?id=eq.{existing[0]["id"]}', method='PATCH', data={'status': 'confirmed', 'payment_status': 'paid', 'xendit_invoice_id': invoice.get('id')})
+        else:
+            supabase_req('bookings', method='POST', data=booking_payload)
+
+    return jsonify({"received": True}), 200
 
 
 @app.route('/api/auth/login', methods=['POST'])
