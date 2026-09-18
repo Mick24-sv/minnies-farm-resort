@@ -79,8 +79,6 @@ Optional:
 - `DEBUG=1` — enables additional backend logging
 - `SENDGRID_API_KEY` — required only if you wire up real email delivery
 - `FROM_EMAIL` — sender email for outgoing messages
-- `STRIPE_SECRET_KEY` — your Stripe secret key for Checkout sessions
-- `STRIPE_WEBHOOK_SECRET` — webhook signing secret from Stripe
 - `FRONTEND_URL` — your deployed frontend URL, for example `https://yourdomain.com/`
 
 Example `.env` (DO NOT commit real values):
@@ -89,22 +87,10 @@ SUPABASE_URL=https://YOUR_PROJECT.supabase.co
 SUPABASE_KEY=YOUR_SUPABASE_KEY
 JWT_SECRET_KEY=YOUR_LONG_RANDOM_SECRET
 DEBUG=1
-STRIPE_SECRET_KEY=sk_test_xxxxxxxxxxxxxxxxx
-STRIPE_WEBHOOK_SECRET=whsec_xxxxxxxxxxxxxxxxx
 FRONTEND_URL=https://your-app.vercel.app/
 ```
 
-### Stripe setup
-To enable real online payments for bookings:
-
-1. Create a Stripe account and get your test or live secret keys.
-2. Add the key values above to your environment.
-3. In Stripe Dashboard, create a webhook endpoint for `/api/payments/webhook`.
-4. Select events such as `checkout.session.completed`.
-5. Copy the webhook signing secret into `STRIPE_WEBHOOK_SECRET`.
-6. Test checkout using Stripe test cards.
-
-This project is already wired to create a Stripe Checkout session when a guest books a room, and it falls back to the normal booking flow if Stripe is not configured yet.
+This project books rooms directly through the normal booking API and does not use Stripe Checkout.
 
 ### 3) Run the API locally
 ```bash

@@ -530,7 +530,7 @@ const __app = createApp({
       loading.value = true;
 
       try {
-        const checkoutRes = await fetch(`${API_URL}/payments/checkout-session`, {
+        const res = await fetch(`${API_URL}/bookings`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token.value}` },
           body: JSON.stringify({ 
@@ -543,51 +543,29 @@ const __app = createApp({
           })
         });
 
-        const checkoutData = await checkoutRes.json().catch(() => ({}));
-
-        if (checkoutRes.ok && checkoutData.url) {
-          window.location.href = checkoutData.url;
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          showToast(data.error || 'Booking failed', 'error');
           return;
         }
 
-        if (checkoutRes.status === 500 && checkoutData.error && checkoutData.error.toLowerCase().includes('stripe')) {
-          const res = await fetch(`${API_URL}/bookings`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token.value}` },
-            body: JSON.stringify({ 
-              room_id: selectedRoom.value.id, 
-              check_in_date: bookingForm.value.checkIn, 
-              check_out_date: bookingForm.value.checkOut, 
-              num_guests: bookingForm.value.guests,
-              total_price: bookingTotal.value,
-              user_id: currentUser.value.id
-            })
-          });
-          const data = await res.json();
-          if (!res.ok) {
-            showToast(data.error || 'Booking failed', 'error');
-            return;
-          }
-          showToast('Booking successful! 🎉', 'success');
-          lastBooking.value = {
-            ref: data.booking.reference_code,
-            room: selectedRoom.value.name,
-            checkIn: data.booking.check_in || data.booking.check_in_date,
-            checkOut: data.booking.check_out || data.booking.check_out_date,
-            guests: data.booking.guest_count || data.booking.num_guests,
-            total: data.booking.total_price
-          };
-          await fetchUserBookings();
-          navigate('confirm');
-          return;
-        }
-
-        if (!checkoutRes.ok) {
-          showToast(checkoutData.error || 'Unable to start checkout', 'error');
-          return;
-        }
+        showToast('Booking successful! 🎉', 'success');
+        lastBooking.value = {
+          ref: data.booking.reference_code,
+          room: selectedRoom.value.name,
+          checkIn: data.booking.check_in || data.booking.check_in_date,
+          checkOut: data.booking.check_out || data.booking.check_out_date,
+          guests: data.booking.guest_count || data.booking.num_guests,
+          total: data.booking.total_price
+        };
+        await fetchUserBookings();
+        navigate('confirm');
       } catch (err) {
         showToast('Connection error: ' + err.message, 'error');
+      } finally {
+        loading.value = false;
+      }
+    }
       }
       loading.value = false;
     }
