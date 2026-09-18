@@ -530,6 +530,25 @@ const __app = createApp({
       loading.value = true;
 
       try {
+        const xenditRes = await fetch(`${API_URL}/payments/xendit/create-invoice`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token.value}` },
+          body: JSON.stringify({ 
+            room_id: selectedRoom.value.id, 
+            check_in_date: bookingForm.value.checkIn, 
+            check_out_date: bookingForm.value.checkOut, 
+            num_guests: bookingForm.value.guests,
+            total_price: bookingTotal.value,
+            user_id: currentUser.value.id
+          })
+        });
+
+        const xenditData = await xenditRes.json().catch(() => ({}));
+        if (xenditRes.ok && xenditData.invoice_url) {
+          window.location.href = xenditData.invoice_url;
+          return;
+        }
+
         const res = await fetch(`${API_URL}/bookings`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token.value}` },
