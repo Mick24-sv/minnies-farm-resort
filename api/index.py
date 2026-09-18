@@ -57,25 +57,8 @@ jwt = JWTManager(app)
 
 SUPABASE_URL = get_clean_env('SUPABASE_URL')
 SUPABASE_KEY = get_clean_env('SUPABASE_KEY')
-XENDIT_API_KEY = get_clean_env('XENDIT_API_KEY')
-XENDIT_WEBHOOK_TOKEN = get_clean_env('XENDIT_WEBHOOK_TOKEN')
 
 RESET_TOKENS = {}
-
-
-def build_xendit_invoice_payload(external_id, amount, description, payer_email=None, metadata=None, currency='PHP'):
-    payload = {
-        'external_id': str(external_id),
-        'amount': int(round(float(amount))),
-        'description': description,
-        'currency': currency,
-        'success_redirect_url': os.getenv('FRONTEND_URL') or 'https://example.com/',
-    }
-    if payer_email:
-        payload['payer_email'] = payer_email
-    if metadata:
-        payload['metadata'] = metadata
-    return payload
 
 
 # --- HELPERS ---
@@ -199,129 +182,6 @@ def health():
             "JWT_SECRET_KEY": "configured" if bool(os.getenv("JWT_SECRET_KEY")) else "missing"
         }
     })
-
-@app.route('/api/payments/xendit/create-invoice', methods=['POST'])
-def create_xendit_invoice():
-    try:
-        user = _get_user_from_request()
-        if not user:
-            return jsonify({"error": "Unauthorized"}), 401
-
-        if not XENDIT_API_KEY:
-            return jsonify({"error": "Xendit is not configured on this server."}), 500
-
-        data = request.get_json() or {}
-        room_id = data.get('room_id')
-        if not room_id:
-            return jsonify({"error": "room_id is required."}), 400
-
-        room_res = supabase_req(f'rooms?id=eq.{room_id}&select=*')
-        if not room_res:
-            return jsonify({"error": "Room not found."}), 404
-        room = room_res[0]
-
-        from datetime import date
-        try:
-            ci = date.fromisoformat(data.get('check_in_date') or data.get('checkIn') or data.get('check_in'))
-            co = date.fromisoformat(data.get('check_out_date') or data.get('checkOut') or data.get('check_out'))
-            nights = (co - ci).days
-            if nights <= 0:
-                nights = 1
-        except Exception:
-            return jsonify({"error": "Invalid booking dates."}), 400
-
-        price_per_night = float(room.get('price_per_night', 0) or 0)
-        subtotal = price_per_night * nights
-        total_price = round(subtotal + (subtotal * 0.10), 2)
-
-        external_id = f"booking-{room_id}-{int(time.time())}"
-        payload = build_xendit_invoice_payload(
-            external_id=external_id,
-            amount=total_price,
-            description=f"{room.get('name', 'Room')} booking for {ci.isoformat()} to {co.isoformat()}",
-            payer_email=(user.get('email') or '').strip(),
-            metadata={
-                'room_id': str(room_id),
-                'user_id': str(user.get('id')),
-                'check_in': ci.isoformat(),
-                'check_out': co.isoformat(),
-                'guest_count': str(int(data.get('num_guests') or data.get('guest_count') or data.get('guests') or 1)),
-                'total_price': str(total_price)
-            }
-        )
-
-        xendit_response = requests.post(
-            'https://api.xendit.co/v2/invoices',
-            auth=('', XENDIT_API_KEY),
-            json=payload,
-            timeout=20
-        )
-
-        if xendit_response.status_code >= 400:
-            return jsonify({"error": xendit_response.text}), xendit_response.status_code
-
-        invoice = xendit_response.json()
-        return jsonify({
-            "message": "Invoice created.",
-            "invoice_id": invoice.get('id'),
-            "invoice_url": invoice.get('invoice_url'),
-            "status": invoice.get('status'),
-            "amount": total_price,
-            "external_id": external_id
-        }), 200
-    except Exception as e:
-        print(f"Xendit invoice error: {e}", flush=True)
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route('/api/payments/xendit/webhook', methods=['GET', 'POST'])
-def xendit_webhook():
-    if request.method == 'GET':
-        return jsonify({
-            "status": "webhook-ready",
-            "allowed_methods": ["GET", "POST"],
-            "xendit_webhook_token_configured": bool(XENDIT_WEBHOOK_TOKEN)
-        }), 200
-
-    callback_token = request.headers.get('x-callback-token') or request.headers.get('X-CALLBACK-TOKEN')
-    if XENDIT_WEBHOOK_TOKEN and callback_token != XENDIT_WEBHOOK_TOKEN:
-        return jsonify({"error": "Invalid callback token"}), 401
-
-    payload = request.get_json(silent=True) or {}
-    invoice = payload.get('data') or payload.get('invoice') or payload
-    status = str(invoice.get('status') or payload.get('status') or '').upper()
-
-    if status != 'PAID':
-        return jsonify({"received": True}), 200
-
-    metadata = invoice.get('metadata') or {}
-    room_id = metadata.get('room_id')
-    user_id = metadata.get('user_id')
-    check_in = metadata.get('check_in')
-    check_out = metadata.get('check_out')
-    guest_count = metadata.get('guest_count', '1')
-    total_price = float(metadata.get('total_price', 0) or 0)
-
-    if room_id and user_id and check_in and check_out:
-        booking_payload = {
-            'user_id': int(user_id),
-            'room_id': int(room_id),
-            'check_in': check_in,
-            'check_out': check_out,
-            'guest_count': int(guest_count),
-            'total_price': total_price,
-            'status': 'confirmed',
-            'payment_status': 'paid',
-            'xendit_invoice_id': invoice.get('id')
-        }
-        existing = supabase_req(f'bookings?user_id=eq.{user_id}&room_id=eq.{room_id}&check_in=eq.{check_in}&check_out=eq.{check_out}&select=*')
-        if existing:
-            supabase_req(f'bookings?id=eq.{existing[0]["id"]}', method='PATCH', data={'status': 'confirmed', 'payment_status': 'paid', 'xendit_invoice_id': invoice.get('id')})
-        else:
-            supabase_req('bookings', method='POST', data=booking_payload)
-
-    return jsonify({"received": True}), 200
-
 
 @app.route('/api/auth/login', methods=['POST'])
 def login():
