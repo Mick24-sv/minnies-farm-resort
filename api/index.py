@@ -990,16 +990,20 @@ def upload_image():
 # --- FRONTEND STATIC & SPA FALLBACK ROUTES ---
 @app.route('/')
 @app.route('/index.html')
+@app.route('/api/index.py')
+@app.route('/api/index')
 def serve_index():
     return send_from_directory(ROOT_DIR, 'index.html')
 
 @app.route('/<path:path>')
 def serve_static(path):
-    if path.startswith('api/'):
-        return jsonify({"error": "API route not found"}), 404
+    if path in ('api/index.py', 'api/index', 'index.html'):
+        return send_from_directory(ROOT_DIR, 'index.html')
     file_path = os.path.join(ROOT_DIR, path)
     if os.path.isfile(file_path):
         return send_from_directory(ROOT_DIR, path)
+    if path.startswith('api/'):
+        return jsonify({"error": f"API endpoint /{path} not found"}), 404
     return send_from_directory(ROOT_DIR, 'index.html')
 
 # Vercel entry point
