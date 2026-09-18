@@ -990,10 +990,17 @@ def upload_image():
 # --- FRONTEND STATIC & SPA FALLBACK ROUTES ---
 @app.route('/')
 @app.route('/index.html')
-@app.route('/api/index.py')
-@app.route('/api/index')
 def serve_index():
     return send_from_directory(ROOT_DIR, 'index.html')
+
+@app.route('/api/index.py')
+@app.route('/api/index')
+def debug_vercel_rewrite():
+    return jsonify({
+        "path": request.path,
+        "url": request.url,
+        "headers": {k: v for k, v in request.headers.items() if 'auth' not in k.lower() and 'key' not in k.lower()}
+    })
 
 @app.route('/<path:path>')
 def serve_static(path):
