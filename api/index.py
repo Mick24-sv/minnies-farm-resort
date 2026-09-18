@@ -274,8 +274,15 @@ def create_xendit_invoice():
         return jsonify({"error": str(e)}), 500
 
 
-@app.route('/api/payments/xendit/webhook', methods=['POST'])
+@app.route('/api/payments/xendit/webhook', methods=['GET', 'POST'])
 def xendit_webhook():
+    if request.method == 'GET':
+        return jsonify({
+            "status": "webhook-ready",
+            "allowed_methods": ["GET", "POST"],
+            "xendit_webhook_token_configured": bool(XENDIT_WEBHOOK_TOKEN)
+        }), 200
+
     callback_token = request.headers.get('x-callback-token') or request.headers.get('X-CALLBACK-TOKEN')
     if XENDIT_WEBHOOK_TOKEN and callback_token != XENDIT_WEBHOOK_TOKEN:
         return jsonify({"error": "Invalid callback token"}), 401
