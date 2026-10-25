@@ -80,6 +80,7 @@ def create_service():
         "category": data.get("category", "day_service"),
         "stock_quantity": int(data.get("stock_quantity", -1)),
         "is_active": data.get("is_active", True),
+        "image_url": data.get("image_url") or None,
     }
     
     result = supabase_client.create_service(service_data)

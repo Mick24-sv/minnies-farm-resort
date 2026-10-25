@@ -1,0 +1,910 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Minnie's Farm Resort</title>
+  <link rel="icon" type="image/svg+xml" href="assets/images/minnies-icon.svg">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/vue/3.3.4/vue.global.prod.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/style.css?v=3.6">
+  <style>
+    /* CRITICAL: Ensure Vue templates are hidden until rendering */
+    [v-cloak] { display: none !important; }
+  </style>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script>
+    window.fbAsyncInit = function() {
+      FB.init({
+        appId: '1466993811807543',
+        cookie: true,
+        xfbml: true,
+        version: 'v19.0'
+      });
+    };
+  </script>
+  <script async defer crossorigin="anonymous" src="https://connect.facebook.net/en_US/sdk.js"></script>
+<style>
+  .image-manage-grid {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 10px !important;
+    margin-top: 10px !important;
+  }
+  .image-manage-item {
+    position: relative !important;
+    width: 80px !important;
+    height: 80px !important;
+    border: 2px dashed #ddd !important;
+    border-radius: 8px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    overflow: hidden !important;
+    background: #fdfaf5 !important;
+  }
+  .image-manage-item img {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover !important;
+  }
+  .image-manage-overlay {
+    position: absolute !important;
+    inset: 0 !important;
+    background: rgba(0,0,0,0.4) !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    opacity: 0 !important;
+    transition: opacity 0.2s !important;
+  }
+  .image-manage-item:hover .image-manage-overlay {
+    opacity: 1 !important;
+  }
+  .btn-remove-img {
+    background: #c0392b !important;
+    color: white !important;
+    border: none !important;
+    padding: 4px 8px !important;
+    border-radius: 4px !important;
+    font-size: 10px !important;
+    cursor: pointer !important;
+  }
+  .upload-label {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    gap: 4px !important;
+    cursor: pointer !important;
+    color: #7a8c85 !important;
+  }
+  .upload-label i { font-style: normal !important; font-size: 1.2rem !important; }
+  .upload-label span { font-size: 0.6rem !important; font-weight: 500 !important; }
+</style>
+</head>
+<body>
+<div id="app" v-cloak>
+  <!-- TOAST NOTIFICATIONS -->
+  <div class="toast-container">
+    <div v-for="(toast, idx) in toasts" :key="idx" :class="['toast', toast.type, {removing: toast.removing}]" :role="toast.type==='error' ? 'alert' : 'status'" aria-atomic="true">
+      {{ toast.message }}
+    </div>
+  </div>
+
+  <!-- NAVBAR -->
+  <nav>
+    <button type="button" class="nav-brand" @click="navigate('home')" aria-label="Minnie's Farm Resort home"><img src="assets/images/minnies-logo-header.svg" alt="Minnie's Farm Resort" width="810" height="165" /></button>
+    <div v-if="currentUser" class="notification-control notification-control-mobile" @keydown.esc.stop.prevent="closeNotifications">
+      <button id="notification-bell-mobile" type="button" class="notification-bell" @click="toggleNotifications" :aria-label="'Notifications, ' + notificationUnread + ' unread'" :aria-expanded="notificationsOpen" aria-controls="notification-inbox">
+        <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg>
+        <span v-if="notificationUnread" class="notification-count" aria-hidden="true">{{ notificationUnread > 99 ? '99+' : notificationUnread }}</span>
+      </button>
+    </div>
+    <button class="mobile-menu-btn" @click="mobileMenuOpen = !mobileMenuOpen; notificationsOpen = false" :aria-label="mobileMenuOpen ? 'Close menu' : 'Open menu'" :aria-expanded="mobileMenuOpen" aria-controls="main-navigation">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path v-if="mobileMenuOpen" d="m6 6 12 12M6 18 18 6"/><path v-else d="M4 6h16M4 12h16M4 18h16"/></svg>
+    </button>
+    <div id="main-navigation" class="nav-links" :class="{ active: mobileMenuOpen }">
+      <template v-if="currentUser">
+        <span class="nav-role-badge">{{ currentUser.role }}</span>
+        <button class="nav-btn" :class="{active: page==='rooms'}" @click="navigate('rooms')">Browse Rooms</button>
+        <button class="nav-btn" :class="{active: page==='services'}" @click="navigate('services')">Services</button>
+        <button class="nav-btn" :class="{active: page==='about'}" @click="navigate('about')">About Us</button>
+        <button class="nav-btn" :class="{active: page==='dashboard'}" @click="navigate('dashboard')">
+          {{ currentUser.role === 'staff' ? 'Staff Dashboard' : 'My Bookings' }}
+        </button>
+        <div class="nav-account-actions">
+          <div class="notification-control notification-control-desktop" @keydown.esc.stop.prevent="closeNotifications">
+            <button id="notification-bell" type="button" class="notification-bell" @click="toggleNotifications" :aria-label="'Notifications, ' + notificationUnread + ' unread'" :aria-expanded="notificationsOpen" aria-controls="notification-inbox">
+              <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg>
+              <span v-if="notificationUnread" class="notification-count" aria-hidden="true">{{ notificationUnread > 99 ? '99+' : notificationUnread }}</span>
+            </button>
+          </div>
+          <button class="nav-btn nav-btn-primary" @click="logout">Logout</button>
+        </div>
+      </template>
+      <template v-else>
+        <button class="nav-btn" :class="{active: page==='rooms'}" @click="navigate('rooms')">Browse Rooms</button>
+        <button class="nav-btn" :class="{active: page==='services'}" @click="navigate('services')">Services</button>
+        <button class="nav-btn" :class="{active: page==='about'}" @click="navigate('about')">About Us</button>
+        <button class="nav-btn nav-btn-primary" @click="navigate('auth')">Login / Register</button>
+      </template>
+    </div>
+      <template v-if="notificationsOpen">
+        <button class="notification-backdrop" type="button" tabindex="-1" aria-label="Close notifications" @click="closeNotifications"></button>
+        <section @keydown.esc.stop.prevent="closeNotifications" id="notification-inbox" class="notification-inbox" aria-labelledby="notification-heading">
+          <header class="notification-header"><div><h2 id="notification-heading" tabindex="-1">Notifications</h2><p>{{ notificationUnread }} unread &middot; Transaction updates</p></div><button type="button" class="notification-close" aria-label="Close notifications" @click="closeNotifications">&times;</button></header>
+          <div class="notification-toolbar"><button type="button" @click="fetchNotifications()" :disabled="notificationsBusy">{{ notificationsBusy ? 'Refreshing...' : 'Refresh' }}</button><button type="button" @click="markNotificationsRead()" :disabled="!notificationUnread || notificationsBusy">Mark all as read</button></div>
+          <div class="notification-list" :aria-busy="notificationsBusy">
+            <p v-if="notificationsError" class="notification-error" role="alert">{{ notificationsError }}</p>
+            <div v-if="!notifications.length && !notificationsError" class="notification-empty"><span class="notification-empty-icon" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg></span><strong>{{ notificationsBusy ? 'Checking for updates...' : 'You are all caught up' }}</strong><p>Your booking, service, and payment updates will appear here.</p></div>
+            <article v-for="item in notifications" :key="item.id" class="notification-item" :class="{ unread: !item.read_at }">
+              <button type="button" class="notification-open" @click="openNotification(item)" :disabled="paymentBusy"><span class="notification-kind">{{ item.entity_kind==='service' ? 'Service' : 'Reservation' }}<span v-if="!item.read_at" class="notification-dot" aria-label="Unread"></span></span><strong>{{ item.title }}</strong><span class="notification-message">{{ item.message }}</span><time :datetime="item.created_at">{{ notificationDate(item.created_at) }} &middot; PH time</time><span class="notification-link">View details &rarr;</span></button>
+              <button v-if="!item.read_at" class="notification-read" type="button" @click="markNotificationsRead(item)" :aria-label="'Mark as read: ' + item.title">Mark read</button>
+            </article>
+            <button v-if="notificationsOlder" type="button" class="notification-older" @click="fetchNotifications(true)" :disabled="notificationsBusy">Load older updates</button>
+          </div>
+          <footer class="notification-footer">Updates every 30 seconds while you use the site.</footer>
+        </section>
+      </template>
+  </nav>
+
+  <!-- HOME -->
+  <div v-if="page==='home'" id="page-home" class="page">
+    <div class="hero">
+      <div class="hero-eyebrow">Farm-to-Nature Resort Experience</div>
+      <h1>Welcome to<br><em>Minnie's Farm Resort</em></h1>
+      <p>Escape the city and reconnect with nature. Enjoy cozy farm-inspired rooms, fresh air, and warm hospitality in every stay.</p>
+      <div class="hero-actions">
+          <button type="button" class="btn btn-primary" @click="navigate('rooms')">Browse Rooms</button>
+          <button type="button" class="btn btn-outline" @click="navigate('services')">Our Services</button>
+      </div>
+    </div>
+    <div class="container">
+      <section class="home-features" aria-labelledby="home-features-heading">
+        <header class="home-features-heading">
+          <p>AROUND THE RESORT</p>
+          <h2 id="home-features-heading">A stay at the farm.</h2>
+        </header>
+        <ul class="home-feature-list">
+          <li v-for="f in features" :key="f.title">
+            <h3>{{ f.title }}</h3>
+            <p>{{ f.desc }}</p>
+          </li>
+        </ul>
+      </section>
+    </div>
+  </div>
+
+  <!-- AUTH -->
+  <main v-if="page==='auth'" class="page auth-page">
+    <div class="auth-wrapper">
+      <div class="auth-shell">
+        <aside class="auth-story" aria-label="A stay close to nature">
+          <div class="auth-story-top"><span class="auth-leaf" aria-hidden="true">&#10043;</span> A LITTLE CLOSER TO NATURE</div>
+          <div class="auth-story-copy">
+            <h1>Slow down.<br>Stay a little <em>longer.</em></h1>
+            <p>Fresh air, quiet mornings, and a place to feel at home. Your next escape starts here.</p>
+          </div>
+          <svg class="auth-landscape" viewBox="0 0 520 340" fill="none" aria-hidden="true">
+            <circle cx="385" cy="78" r="39" fill="#DCC480"/>
+            <path d="M0 191C99 106 169 126 248 165C340 210 416 108 520 149V340H0Z" fill="#446C58"/>
+            <path d="M0 235C100 164 166 192 268 232C365 269 446 164 520 199V340H0Z" fill="#719477"/>
+            <path d="M0 288C116 218 203 254 301 282C399 310 454 235 520 253V340H0Z" fill="#9EAD80"/>
+            <path d="M327 340C301 310 260 298 209 284C173 274 162 258 179 247" stroke="#E4D6AA" stroke-width="21"/>
+            <path d="M94 228H182V282H94Z" fill="#EADFC2"/>
+            <path d="M80 231L137 190L196 231Z" fill="#223F33"/>
+            <path d="M130 250H147V282H130Z" fill="#61745C"/>
+            <path d="M105 246H119V260H105ZM158 246H172V260H158Z" fill="#BB9B57"/>
+            <path d="M420 201V282M449 232V286" stroke="#284B3D" stroke-width="6"/>
+            <ellipse cx="420" cy="194" rx="24" ry="43" fill="#294F3E"/>
+            <ellipse cx="449" cy="225" rx="18" ry="33" fill="#365F48"/>
+            <path d="M278 111Q286 103 294 111M304 100Q312 92 320 100" stroke="#D3DFC7" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          <div class="auth-story-footer"><span class="auth-story-dot"></span> Make room for a slower kind of stay.</div>
+        </aside>
+        <section class="auth-card" aria-labelledby="auth-heading">
+          <button type="button" class="auth-back" @click="navigate('rooms')"><span aria-hidden="true">&larr;</span> Back to exploring</button>
+          <div class="auth-logo">
+            <img class="auth-brand-image" src="assets/images/minnies-logo.svg" alt="Minnie's Farm Resort" width="810" height="165" />
+            <h2 id="auth-heading">{{ authTab==='login' ? 'Welcome back.' : 'Your escape awaits.' }}</h2>
+            <p>{{ authTab==='login' ? 'Sign in to plan your next peaceful getaway.' : 'Create an account and make yourself at home.' }}</p>
+          </div>
+          <div class="auth-tabs" role="group" aria-label="Account options">
+            <button type="button" class="auth-tab" :class="{active: authTab==='login'}" :aria-pressed="authTab==='login'" :disabled="loading" @click="authTab='login'; authMsg=''">Sign in</button>
+            <button type="button" class="auth-tab" :class="{active: authTab==='register'}" :aria-pressed="authTab==='register'" :disabled="loading" @click="authTab='register'; authMsg=''">Create account</button>
+          </div>
+          <div v-if="authMsg" :key="authMsgKey" role="status" :class="['alert', authMsgType==='success'?'alert-success':'alert-error']">{{ authMsg }}</div>
+          <form v-if="authTab==='login'" @submit.prevent="doLogin" :aria-busy="loading">
+            <div class="form-group"><label for="login-email">Email address</label><input id="login-email" type="email" v-model.trim="loginForm.email" autocomplete="email" inputmode="email" placeholder="you@example.com" required /></div>
+            <div class="form-group">
+              <div class="auth-label-row"><label for="login-password">Password</label><button type="button" class="auth-text-button" @click="showForgotPassword=true">Forgot password?</button></div>
+              <div class="auth-password"><input id="login-password" :type="showLoginPw ? 'text' : 'password'" v-model="loginForm.password" autocomplete="current-password" placeholder="Enter your password" required /><button type="button" class="auth-password-toggle" @click="showLoginPw=!showLoginPw" :aria-label="showLoginPw ? 'Hide password' : 'Show password'" :aria-pressed="showLoginPw"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/><path v-if="showLoginPw" d="m3 3 18 18"/></svg></button></div>
+            </div>
+            <button type="submit" class="auth-submit" :disabled="loading"><span>{{ loading ? 'Signing in…' : 'Sign in' }}</span><span v-if="!loading" aria-hidden="true">&rarr;</span></button>
+            <div class="auth-divider"><span>or continue with</span></div>
+            <button type="button" class="auth-google" @click="googleLogin" :disabled="loading">
+              <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#4285F4" d="M43.6 24.5c0-1.4-.1-2.8-.4-4.1H24v7.8h11c-.5 2.5-1.9 4.6-4.1 6v5h6.6c3.9-3.6 6.1-8.7 6.1-14.7Z"/><path fill="#34A853" d="M24 44c5.5 0 10.1-1.8 13.5-4.8l-6.6-5c-1.8 1.2-4.1 1.9-6.9 1.9-5.3 0-9.8-3.6-11.4-8.4H5.8v5.2A20.4 20.4 0 0 0 24 44Z"/><path fill="#FBBC05" d="M12.6 27.7a12.2 12.2 0 0 1 0-7.4v-5.2H5.8a20 20 0 0 0 0 17.8Z"/><path fill="#EA4335" d="M24 11.9c3 0 5.7 1 7.8 3l5.8-5.8A19.6 19.6 0 0 0 24 4 20.4 20.4 0 0 0 5.8 15.1l6.8 5.2c1.6-4.8 6.1-8.4 11.4-8.4Z"/></svg>
+              Continue with Google
+            </button>
+            <p class="auth-switch">New to the farm? <button type="button" class="auth-text-button" :disabled="loading" @click="authTab='register'; authMsg=''">Create an account</button></p>
+          </form>
+          <form v-else @submit.prevent="doRegister" :aria-busy="loading">
+            <div class="form-group"><label for="register-name">Full name</label><input id="register-name" type="text" v-model.trim="regForm.name" autocomplete="name" placeholder="Juan dela Cruz" required /></div>
+            <div class="form-group"><label for="register-email">Email address</label><input id="register-email" type="email" v-model.trim="regForm.email" autocomplete="email" inputmode="email" placeholder="you@example.com" required /></div>
+            <div class="auth-register-passwords">
+              <div class="form-group"><label for="register-password">Password</label><div class="auth-password"><input id="register-password" :type="showRegPw ? 'text' : 'password'" v-model="regForm.password" autocomplete="new-password" placeholder="Create a password" required /><button type="button" class="auth-password-toggle" @click="showRegPw=!showRegPw" :aria-label="showRegPw ? 'Hide password' : 'Show password'" :aria-pressed="showRegPw"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/><path v-if="showRegPw" d="m3 3 18 18"/></svg></button></div></div>
+              <div class="form-group"><label for="register-confirm">Confirm password</label><div class="auth-password"><input id="register-confirm" :type="showRegConfirmPw ? 'text' : 'password'" v-model="regForm.confirm" autocomplete="new-password" placeholder="Repeat your password" required /><button type="button" class="auth-password-toggle" @click="showRegConfirmPw=!showRegConfirmPw" :aria-label="showRegConfirmPw ? 'Hide confirmation password' : 'Show confirmation password'" :aria-pressed="showRegConfirmPw"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/><path v-if="showRegConfirmPw" d="m3 3 18 18"/></svg></button></div></div>
+            </div>
+            <button type="submit" class="auth-submit" :disabled="loading"><span>{{ loading ? 'Creating account…' : 'Create account' }}</span><span v-if="!loading" aria-hidden="true">&rarr;</span></button>
+            <p class="auth-switch">Already have an account? <button type="button" class="auth-text-button" :disabled="loading" @click="authTab='login'; authMsg=''">Sign in</button></p>
+          </form>
+          <div class="auth-footnote">A peaceful stay starts with peace of mind. <a href="privacy.html" target="_blank" rel="noopener">Privacy policy<span class="auth-sr-only"> (opens in a new tab)</span></a></div>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <!-- ROOMS LIST -->
+  <main v-if="page==='rooms'" class="page rooms-page" v-cloak>
+    <div class="container">
+      <header class="rooms-heading"><div><p class="rooms-eyebrow">STAY AT MINNIE'S</p><h1>Find your room.</h1><p>A place to settle in, with the farm just outside.</p></div><p class="rooms-result-count" role="status">{{ roomsLoading ? 'Loading rooms…' : roomLoadError ? 'Rooms unavailable' : filteredRooms.length + (filteredRooms.length === 1 ? ' room to explore' : ' rooms to explore') }}</p></header>
+      <section class="room-filter-panel" aria-labelledby="room-filter-heading">
+        <header><div class="room-filter-heading"><span class="room-filter-heading-icon" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M4 7h16M7 4v6M17 4v6M4 17h16M9 14v6"/></svg></span><div><h2 id="room-filter-heading">Plan your stay</h2><p>A few details to find your kind of room.</p></div></div><button type="button" class="rooms-clear" @click="resetFilters" :disabled="roomsLoading"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10a9 9 0 1 1 2 8M3 4v6h6"/></svg>Reset</button></header>
+        <div class="room-filter-fields">
+          <div><label for="rooms-check-in"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4M17 3v4M3 11h18m-10 5h6m-3-3 3 3-3 3"/></svg>Check-in</label><input id="rooms-check-in" type="date" v-model="filters.checkIn" :min="today" /></div>
+          <div><label for="rooms-check-out"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4M17 3v4M3 11h18m-5 5H8m3-3-3 3 3 3"/></svg>Check-out</label><input id="rooms-check-out" type="date" v-model="filters.checkOut" :min="filters.checkIn || today" /></div>
+          <div><label for="rooms-type"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 20V9m18 11V9M3 16h18M5 16v-5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v5M7 9V5h10v4M3 19h18"/></svg>Room type</label><select id="rooms-type" v-model="filters.type"><option value="">All room types</option><option>Standard</option><option>Themed</option><option>Deluxe</option><option>Suite</option></select></div>
+          <div><label for="rooms-price"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 21V3h5a5 5 0 0 1 0 10H8M4 7h16M4 10h16"/></svg>Nightly budget (₱)</label><input id="rooms-price" type="number" min="0" step="100" inputmode="decimal" v-model="filters.maxPrice" placeholder="No limit" aria-description="Maximum price per night in Philippine pesos" /></div>
+          <div><label for="rooms-guests"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="7" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3M16 4a3 3 0 0 1 0 6M21 21v-3a6 6 0 0 0-3-5"/></svg>Guests</label><select id="rooms-guests" v-model="filters.capacity"><option value="">Any number</option><option v-for="count in 10" :key="count" :value="String(count)">{{ count }} {{ count===1 ? 'guest' : 'guests' }}</option></select></div>
+        </div>
+        <p class="room-filter-note">Your dates will be carried over when you choose a room.</p>
+      </section>
+      <div v-if="roomsLoading" class="rooms-feedback" role="status"><h2>Finding your next stay…</h2><p>Loading rooms and rates.</p></div>
+      <div v-else-if="roomLoadError" class="rooms-feedback" role="status"><h2>We couldn't load the rooms.</h2><p>Please try again in a moment.</p><button type="button" class="rooms-retry" @click="fetchRooms">Try again</button></div>
+      <div v-else-if="!filteredRooms.length" class="rooms-feedback" role="status"><h2>No rooms match just yet.</h2><p>Try another room type, price, or number of guests.</p><button type="button" class="rooms-retry" @click="resetFilters">Clear filters</button></div>
+      <div v-else class="rooms-grid">
+        <article v-for="room in filteredRooms" :key="room.id" class="room-card" :aria-labelledby="'room-title-' + room.id">
+          <div class="room-card-image"><span class="room-image-fallback" aria-hidden="true">Minnie's Farm Resort</span><img v-if="room.image_url" :src="room.image_url" :alt="room.name" loading="lazy" decoding="async" @error="$event.target.style.display='none'" /></div>
+          <div class="room-body">
+            <div class="room-card-meta"><p class="room-type-tag">{{ room.type }}</p><span class="room-state" :class="{'is-booked':room.room_status==='fully_booked','is-maintenance':room.room_status==='under_maintenance'}">{{ room.room_status==='under_maintenance' ? 'Under maintenance' : room.room_status==='fully_booked' ? 'Booked' : 'Available' }}</span></div>
+            <h2 class="room-name" :id="'room-title-' + room.id">{{ room.name }}</h2>
+            <p class="room-meta"><span>Up to {{ room.capacity }} {{ Number(room.capacity)===1 ? 'guest' : 'guests' }}</span><span v-if="room.sqm">{{ room.sqm }} m²</span></p>
+            <ul class="room-amenities" aria-label="Room amenities"><li v-for="amenity in (room.amenities || []).slice(0,3)" :key="amenity">{{ amenity }}</li></ul>
+            <div class="room-footer"><div class="room-price"><span class="amount">₱{{ Number(room.price_per_night || 0).toLocaleString('en-PH') }}</span><span class="per">per night</span></div><button type="button" class="room-details-button" @click="viewRoom(room)" :disabled="room.room_status==='under_maintenance'" :aria-label="room.room_status==='under_maintenance' ? room.name + ' is under maintenance' : 'View details for ' + room.name">{{ room.room_status==='under_maintenance' ? 'Unavailable' : 'View room' }}<span v-if="room.room_status!=='under_maintenance'" aria-hidden="true">&rarr;</span></button></div>
+          </div>
+        </article>
+      </div>
+    </div>
+  </main>
+  <!-- ROOM DETAIL -->
+  <main v-if="page==='detail' && selectedRoom" class="page detail-page">
+    <div class="container">
+      <button type="button" class="detail-back" @click="navigate('rooms')"><span aria-hidden="true">&larr;</span> All rooms</button>
+      <header class="detail-heading"><p>{{ selectedRoom.type }} ROOM</p><h1>{{ selectedRoom.name }}</h1><ul aria-label="Room details"><li>Up to {{ selectedRoom.capacity }} {{ Number(selectedRoom.capacity)===1 ? 'guest' : 'guests' }}</li><li v-if="selectedRoom.sqm">{{ selectedRoom.sqm }} m²</li><li v-if="reviewsTotal">{{ reviewsAvg }} / 5 &middot; {{ reviewsTotal }} {{ reviewsTotal===1 ? 'review' : 'reviews' }}</li></ul></header>
+      <div class="detail-layout">
+        <div class="detail-main">
+          <section class="detail-photos" aria-label="Room photo gallery" tabindex="0" @keydown.left.prevent="changeRoomPhoto(-1)" @keydown.right.prevent="changeRoomPhoto(1)">
+            <div class="detail-photo-stage" :class="{ 'has-multiple-photos': roomPhotos.length > 1 }" @pointerdown="startRoomPhotoGesture" @pointerup="endRoomPhotoGesture" @pointercancel="cancelRoomPhotoGesture" @lostpointercapture="cancelRoomPhotoGesture"><span class="detail-photo-placeholder" aria-hidden="true">Minnie's Farm Resort</span><img v-if="roomPhotos.length" draggable="false" :key="roomPhotos[activeRoomPhoto]" :src="roomPhotos[activeRoomPhoto]" :alt="selectedRoom.name + ', photo ' + (activeRoomPhoto + 1)" decoding="async" @error="$event.target.style.display='none'" />
+              <template v-if="roomPhotos.length > 1"><button type="button" class="detail-photo-prev" aria-label="Previous room photo" @click="changeRoomPhoto(-1)">&larr;</button><button type="button" class="detail-photo-next" aria-label="Next room photo" @click="changeRoomPhoto(1)">&rarr;</button></template>
+              <span v-if="roomPhotos.length" class="detail-photo-count" role="status">{{ activeRoomPhoto + 1 }} / {{ roomPhotos.length }}</span>
+            </div>
+            <div v-if="roomPhotos.length > 1" class="detail-photo-thumbs" role="group" aria-label="Choose a room photo"><button v-for="(photo,index) in roomPhotos" :key="photo" type="button" :class="{active:activeRoomPhoto===index}" :aria-label="'View photo ' + (index+1)" :aria-pressed="activeRoomPhoto===index" @click="activeRoomPhoto=index"><span aria-hidden="true">{{ index+1 }}</span><img :src="photo" alt="" loading="lazy" decoding="async" @error="$event.target.style.display='none'" /></button></div>
+          </section>
+          <section class="detail-description" aria-labelledby="detail-about-heading"><h2 id="detail-about-heading">About this room</h2><p>{{ selectedRoom.description || 'A comfortable base for your stay at the farm.' }}</p></section>
+          <section class="detail-facilities" aria-labelledby="detail-facilities-heading"><h2 id="detail-facilities-heading">What this room offers</h2><ul v-if="selectedRoom.amenities && selectedRoom.amenities.length"><li v-for="amenity in selectedRoom.amenities" :key="amenity"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>{{ amenity }}</li></ul><p v-else>Ask our team about the amenities in this room.</p></section>
+        </div>
+        <aside class="detail-reservation" aria-labelledby="detail-reservation-heading">
+          <form class="detail-booking-panel" @submit.prevent="doBook" :aria-busy="loading">
+            <header><h2 id="detail-reservation-heading">Your stay</h2><p><strong>₱{{ Number(selectedRoom.price_per_night || 0).toLocaleString('en-PH') }}</strong><span> / night</span></p><span class="detail-booking-status" :class="{'is-unavailable':!selectedRoom.is_available}">{{ selectedRoom.is_available ? 'Room available' : 'Currently unavailable' }}</span></header>
+            <div class="detail-booking-dates"><div><label for="detail-check-in">Check-in</label><input id="detail-check-in" type="date" v-model="bookingForm.checkIn" :min="today" required /></div><div><label for="detail-check-out">Check-out</label><input id="detail-check-out" type="date" v-model="bookingForm.checkOut" :min="bookingForm.checkIn||today" required /></div></div>
+            <div class="detail-booking-guests"><label for="detail-guests">Guests</label><select id="detail-guests" v-model="bookingForm.guests"><option v-for="n in Number(selectedRoom.capacity)" :key="n" :value="n">{{ n }} {{ n===1 ? 'guest' : 'guests' }}</option></select></div>
+            <p v-if="bookingForm.checkIn && bookingForm.checkOut && bookingNights<=0" class="detail-date-error" role="status">Check-out must be after check-in.</p>
+            <dl v-if="bookingNights > 0" class="detail-price-summary"><div><dt>₱{{ Number(selectedRoom.price_per_night || 0).toLocaleString('en-PH') }} × {{ bookingNights }} {{ bookingNights===1 ? 'night' : 'nights' }}</dt><dd>₱{{ (Number(selectedRoom.price_per_night || 0)*bookingNights).toLocaleString('en-PH') }}</dd></div><div><dt>Resort fee (10%)</dt><dd>₱{{ Math.round(Number(selectedRoom.price_per_night || 0)*bookingNights*0.1).toLocaleString('en-PH') }}</dd></div><div class="detail-price-total"><dt>Total</dt><dd>₱{{ Number(bookingTotal || 0).toLocaleString('en-PH') }}</dd></div></dl>
+            <p v-else class="detail-fee-note">A 10% resort fee is added to the room rate.</p>
+            <button type="submit" class="detail-book-button" :disabled="loading || !selectedRoom.is_available || bookingNights<=0 || !paymentOptions.configured || paymentOptionsLoading || paymentOptionsError">{{ loading ? 'Booking…' : !selectedRoom.is_available ? 'Room unavailable' : paymentOptionsLoading ? 'Checking payment options...' : paymentOptionsError ? 'Payment options unavailable' : !paymentOptions.configured ? 'Contact us to book' : bookingNights<=0 ? 'Choose your dates' : 'Reserve with 50% deposit' }}<span v-if="!loading && selectedRoom.is_available && bookingNights>0" aria-hidden="true">&rarr;</span></button>
+            <p class="detail-fee-note" v-if="paymentOptions.configured">A 50% deposit is due within 3 hours. Staff verify your payment before confirming the reservation.</p><div v-else-if="!paymentOptions.configured || paymentOptionsError" class="detail-fee-note"><p>{{ paymentOptionsLoading ? 'Checking payment options...' : paymentOptionsError ? 'Could not load payment options. Please try again.' : 'Online deposits are not set up yet.' }} <a href="tel:+639666619229">Call the resort to book.</a></p><button type="button" class="guest-text-button" @click="fetchPaymentOptions" :disabled="paymentOptionsLoading">Recheck payment options</button></div><p v-if="!currentUser" class="detail-sign-in"><button type="button" @click="navigate('auth')">Sign in</button> to make a reservation.</p>
+          </form>
+        </aside>
+        <section class="detail-reviews" aria-labelledby="detail-reviews-heading">
+          <header><h2 id="detail-reviews-heading">Guest reviews</h2><span v-if="reviewsTotal" class="detail-review-score"><span aria-hidden="true">&#9733;</span> {{ reviewsAvg }} <span>({{ reviewsTotal }})</span></span></header>
+          <form v-if="eligibleBooking" class="detail-review-form" @submit.prevent="submitReview"><h3>How was your stay?</h3><fieldset><legend>Your rating</legend><div class="detail-rating-picker"><button v-for="star in 5" :key="star" type="button" :class="{selected:star <= (reviewHover || reviewForm.rating)}" :aria-label="star + (star===1 ? ' star' : ' stars')" :aria-pressed="reviewForm.rating===star" @mouseenter="reviewHover=star" @mouseleave="reviewHover=0" @focus="reviewHover=star" @blur="reviewHover=0" @click="reviewForm.rating=star">&#9733;</button></div></fieldset><label for="detail-review-text">Your review <span>(optional)</span></label><textarea id="detail-review-text" v-model="reviewForm.review" rows="3" placeholder="Tell other guests about your stay."></textarea><button type="submit" class="detail-review-submit" :disabled="loading">Submit review</button></form>
+          <div v-if="!reviewsTotal && !eligibleBooking" class="detail-no-reviews"><p>No reviews yet.</p><span>Guests can share a review after a completed stay.</span></div>
+          <article v-for="review in reviews" :key="review.id" class="detail-review"><header><div><h3>{{ review.guest_name }}</h3><p class="detail-review-stars" :aria-label="review.rating + ' out of 5 stars'"><span v-for="star in 5" :key="star" aria-hidden="true">{{ star <= review.rating ? '★' : '☆' }}</span></p></div><time v-if="review.created_at" :datetime="review.created_at">{{ formatGuestDate(review.created_at) }}</time></header><p v-if="review.review">{{ review.review }}</p></article>
+        </section>
+      </div>
+    </div>
+  </main>
+  <!-- SERVICES -->
+  <div v-if="page==='services'" class="page" v-cloak>
+    <div class="services-hero">
+      <div class="hero-eyebrow">What We Offer</div>
+      <h1>Resort <em>Services</em></h1>
+      <p>You don't need to book a room to enjoy Minnie's Farm Resort. Drop in, have fun, and make memories!</p>
+    </div>
+    <div class="container">
+      <section class="service-selection" aria-labelledby="service-selection-heading">
+      <header class="service-selection-heading">
+        <div><p class="service-selection-kicker">FOR YOUR DAY AT THE FARM</p><h2 id="service-selection-heading">Resort services.</h2></div>
+        <p>Drop by for the day, or add something to your stay.</p>
+      </header>
+      <div class="service-cards" :aria-busy="servicesLoading">
+        <template v-if="!servicesLoading && services && services.length">
+          <article class="service-card" v-for="s in services" :key="s.id" :aria-labelledby="'service-name-' + s.id">
+            <div class="service-photo" aria-hidden="true">
+              <span class="service-photo-fallback">Minnie's Farm Resort</span>
+              <img v-if="s.image_url || s.name.includes('Entrance') || s.name.includes('Karaoke')" :src="s.image_url || (s.name.includes('Entrance') ? 'https://i.imgur.com/2UDN3qi.jpg' : 'https://i.imgur.com/taAWIUe.jpg')" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" @error="$event.target.style.display='none'" />
+            </div>
+            <div class="service-card-body">
+              <div class="service-card-meta">
+                <span class="service-category">{{ s.category === 'bundle' ? 'Day package' : 'Resort experience' }}</span>
+                <span v-if="s.stock_quantity != null && Number(s.stock_quantity) !== -1" class="service-availability" :class="{ 'is-unavailable': Number(s.stock_quantity) <= 0 }">{{ Number(s.stock_quantity) > 0 ? s.stock_quantity + ' available' : 'Currently unavailable' }}</span>
+              </div>
+              <h3 class="service-card-name" :id="'service-name-' + s.id">{{ s.name }}</h3>
+              <p class="service-card-tagline">{{ s.description }}</p>
+              <p class="room-editor-help">Pay in full online or at the counter before using the service. No room or cottage booking is required.</p><div class="service-card-footer">
+                <div class="service-price-block"><span class="service-price">₱{{ Number(s.price).toLocaleString('en-PH', { maximumFractionDigits: 2 }) }}</span><span class="service-price-label">{{ s.category === 'bundle' ? 'per bundle' : 'per person' }}</span></div>
+                <button type="button" class="service-request-button" :disabled="paymentBusy || s.stock_quantity != null && Number(s.stock_quantity) !== -1 && Number(s.stock_quantity) <= 0" :aria-label="'Request ' + s.name" @click="availService(s)">
+                  {{ s.stock_quantity != null && Number(s.stock_quantity) !== -1 && Number(s.stock_quantity) <= 0 ? 'Unavailable' : 'Request service' }}<span v-if="s.stock_quantity == null || Number(s.stock_quantity) === -1 || Number(s.stock_quantity) > 0" aria-hidden="true">&rarr;</span>
+                </button>
+              </div>
+            </div>
+          </article>
+        </template>
+
+        <!-- Loading State -->
+        <div v-else-if="servicesLoading" class="service-selection-state" role="status">
+          <p>Loading services...</p>
+        </div>
+
+        <!-- Empty State -->
+        <div v-else class="service-selection-state" role="status">
+          <p>No services are currently available for booking.</p>
+        </div>
+      </div>
+      </section>
+      <div class="divider-title"><h2>Frequently Asked Questions</h2><p>Everything you need to know before visiting</p></div>
+      <div class="services-faq">
+        <div class="faq-item" v-for="faq in faqs" :key="faq.q">
+          <div class="faq-q" @click="faq.open = !faq.open">{{ faq.q }}<span>{{ faq.open ? '▲' : '▼' }}</span></div>
+          <div class="faq-a" v-if="faq.open">{{ faq.a }}</div>
+        </div>
+      </div>
+      <div style="text-align:center;padding-bottom:3rem"><p style="color:var(--muted);margin-bottom:1rem;font-size:0.93rem">Want to stay overnight instead?</p><button class="btn btn-teal" @click="navigate('rooms')">Browse Our Rooms</button></div>
+    </div>
+  </div>
+
+
+  <!-- GUEST DASHBOARD -->
+  <main v-if="page==='dashboard' && currentUser && currentUser.role==='guest'" class="page guest-dashboard">
+    <div class="container">
+      <header class="guest-heading">
+        <div><p class="guest-eyebrow">YOUR ACCOUNT</p><h1>Your stays</h1><p>Keep track of your reservations and requests.</p></div>
+        <button type="button" class="guest-refresh" @click="refreshGuestDashboard" :disabled="guestRefreshing"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6 7a7 7 0 0 1 12-1l2 3M4 15l2 3a7 7 0 0 0 12-1"/></svg>{{ guestRefreshing ? 'Refreshing…' : 'Refresh' }}</button>
+      </header>
+      <div class="guest-layout">
+        <aside class="guest-account" aria-label="Your account">
+          <div class="guest-identity"><div class="guest-avatar" aria-hidden="true">{{ (currentUser.name || 'G').charAt(0).toUpperCase() }}</div><div class="guest-identity-text"><h2>{{ currentUser.name }}</h2><p>{{ currentUser.email }}</p></div></div>
+          <nav class="guest-account-nav" aria-label="Account shortcuts"><button type="button" aria-current="page" @click="dashTab='upcoming'">Your bookings</button><button type="button" @click="navigate('rooms')">Browse rooms <span aria-hidden="true">&rarr;</span></button><button type="button" class="guest-logout" @click="logout">Sign out</button></nav>
+        </aside>
+        <div class="guest-content">
+          <section aria-labelledby="guest-bookings-heading">
+            <h2 id="guest-bookings-heading" class="guest-section-heading">Reservations</h2>
+            <div class="guest-tabs" role="group" aria-label="Reservation history"><button type="button" :class="{active:dashTab==='upcoming'}" :aria-pressed="dashTab==='upcoming'" @click="dashTab='upcoming'">Upcoming <span>{{ upcomingBookings.length }}</span></button><button type="button" :class="{active:dashTab==='past'}" :aria-pressed="dashTab==='past'" @click="dashTab='past'">Past <span>{{ pastBookings.length }}</span></button></div>
+            <div v-if="!(dashTab==='upcoming' ? upcomingBookings : pastBookings).length" class="guest-empty">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4M17 3v4M3 11h18M8 15h3"/></svg>
+              <h3>{{ dashTab==='upcoming' ? 'Your next stay starts here.' : 'No past stays yet.' }}</h3><p>{{ dashTab==='upcoming' ? 'Find a room and make a little time for the farm.' : 'Your completed and cancelled reservations will appear here.' }}</p>
+              <button v-if="dashTab==='upcoming'" type="button" class="guest-primary" @click="navigate('rooms')">Explore rooms <span aria-hidden="true">&rarr;</span></button>
+            </div>
+            <div class="guest-booking-list">
+              <article v-for="b in (dashTab==='upcoming' ? upcomingBookings : pastBookings)" :key="b.id" class="guest-booking">
+                <header class="guest-booking-heading"><div><p class="guest-reference">Reservation #{{ b.id }}</p><h3>{{ b.room }}</h3></div><span class="status-chip" :class="'status-'+b.status">{{ b.status }}</span></header>
+                <dl class="guest-booking-details"><div><dt>Check-in</dt><dd><time :datetime="b.checkIn">{{ formatGuestDate(b.checkIn) }}</time></dd></div><div><dt>Check-out</dt><dd><time :datetime="b.checkOut">{{ formatGuestDate(b.checkOut) }}</time></dd></div><div><dt>Reservation total</dt><dd class="guest-total">₱{{ Number(b.total || 0).toLocaleString('en-PH') }}</dd></div></dl>
+                <p class="booking-payment-status">{{ paymentStatusLabel(b) }} &middot; Paid &#8369;{{ bookingMoney(b.amount_paid) }} &middot; Balance &#8369;{{ bookingMoney(b.balance_due) }}</p><p v-if="b.status==='pending'" class="booking-payment-deadline">{{ b.payment_review_status==='pending_review' ? 'Payment submitted - awaiting staff review.' : 'Deposit deadline: ' + paymentDeadline(b.payment_due_at) }}</p><button type="button" class="guest-text-button" @click="openPaymentDialog(b)">{{ b.status==='pending' ? 'Deposit / payment details' : 'Payment history' }}</button><footer v-if="dashTab==='upcoming' && (b.status==='pending' || b.status==='confirmed')" class="guest-booking-footer"><button type="button" class="guest-cancel" :disabled="loading || guestRefreshing" :aria-label="'Cancel reservation for ' + b.room" @click="cancelBooking(b)">Cancel reservation</button></footer>
+              </article>
+            </div>
+          </section>
+          <section class="guest-services" aria-labelledby="guest-services-heading">
+            <header class="guest-services-heading"><div><h2 id="guest-services-heading" class="guest-section-heading">Service requests <span>{{ serviceAvails.length }}</span></h2><p>Extras you've requested for your visit.</p></div><button type="button" class="guest-text-button" @click="navigate('services')">Browse services <span aria-hidden="true">&rarr;</span></button></header>
+            <div v-if="!serviceAvails.length" class="guest-service-empty"><p>No service requests yet.</p><span>Explore what's available for your day at the resort.</span></div>
+            <div class="guest-service-list">
+              <article v-for="a in serviceAvails" :key="a.id" class="guest-service-record">
+                <div><h3>{{ a.service_name }}</h3><p v-if="a.requested_payment_method==='cash' && a.status==='pending'" class="room-editor-help">Pay at counter &middot; MFS-{{ a.id }}</p><p class="booking-payment-status">{{ paymentStatusLabel(a) }} &middot; Balance &#8369;{{ bookingMoney(a.balance_due) }}</p><button type="button" class="guest-text-button" @click="openPaymentDialog(a, 'service')">{{ a.status==='pending' ? 'Pay / payment details' : 'Payment history' }}</button><p v-if="a.created_at || a.availed_at">Requested {{ formatGuestDate(a.created_at || a.availed_at) }}</p><span class="status-chip" :class="'status-'+a.status">{{ a.status }}</span></div>
+                <div class="guest-service-amount"><span>Total</span><p>₱{{ Number(a.total_price || 0).toLocaleString('en-PH') }}</p></div>
+              </article>
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+  </main>
+  <!-- STAFF DASHBOARD -->
+  <div v-if="page==='dashboard' && currentUser && currentUser.role==='staff'" class="page staff-dashboard">
+    <div class="container">
+      <header class="staff-heading">
+        <div><p class="staff-eyebrow">MINNIE'S FARM RESORT / STAFF</p><h1>Dashboard</h1><p class="staff-subtitle">Rooms, reservations, and the day ahead.</p></div>
+        <button type="button" class="staff-refresh" @click="refreshStaffDashboard" :disabled="staffRefreshing">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6 7a7 7 0 0 1 12-1l2 3M4 15l2 3a7 7 0 0 0 12-1"/></svg>
+          {{ staffRefreshing ? 'Refreshing…' : 'Refresh data' }}
+        </button>
+      </header>
+      <dl class="staff-stats">
+        <div><dt>Total rooms</dt><dd>{{ rooms.length }}</dd><dd class="staff-stat-note">Across the resort</dd></div>
+        <div><dt>Active bookings</dt><dd>{{ allBookings.filter(b=>b.status==='confirmed').length }}</dd><dd class="staff-stat-note">Confirmed reservations</dd></div>
+        <div><dt>Available rooms</dt><dd>{{ rooms.filter(r=>r.is_available).length }}</dd><dd class="staff-stat-note">Ready for guests</dd></div>
+        <div><dt>Payments received</dt><dd>&#8369;{{ allBookings.reduce((sum,b)=>sum+Number(b.amount_paid || 0),0).toLocaleString('en-PH') }}</dd><dd class="staff-stat-note">Recorded receipts, before refunds</dd></div>
+      </dl>
+
+      <div class="staff-tabs" role="group" aria-label="Dashboard sections">
+        <button type="button" :class="{active:staffTab==='bookings'}" :aria-pressed="staffTab==='bookings'" @click="staffTab='bookings'">Bookings <span>{{ allBookings.length }}</span></button>
+        <button type="button" :class="{active:staffTab==='services'}" :aria-pressed="staffTab==='services'" @click="staffTab='services'">Services</button>
+        <button type="button" :class="{active:staffTab==='rooms'}" :aria-pressed="staffTab==='rooms'" @click="staffTab='rooms'">Rooms</button>
+      </div>
+
+      <!-- STAFF: MANAGE SERVICES -->
+      <div v-if="staffTab==='services'">
+        <div class="table-wrap">
+          <div class="table-header">
+            <h3>Service Inventory</h3>
+            <button class="btn btn-teal btn-sm" @click="openAddService" type="button">+ Add New Service</button>
+          </div>
+          <table role="table" class="data-table">
+            <thead><tr role="row"><th role="columnheader" scope="col">Service</th><th role="columnheader" scope="col">Category</th><th role="columnheader" scope="col">Price</th><th role="columnheader" scope="col">Stock Quantity</th><th role="columnheader" scope="col">Visibility</th></tr></thead>
+            <tbody>
+              <tr role="row" v-for="s in staffPagination.services.rows" :key="s.id">
+                <td data-label="Service" role="cell"><strong>{{ s.name }}</strong></td>
+                <td data-label="Category" role="cell">{{ s.category }}</td>
+                <td data-label="Price" role="cell">₱{{ Number(s.price).toLocaleString() }}</td>
+                <td data-label="Stock Quantity" role="cell">
+                  <div style="display:flex;align-items:center;gap:0.5rem">
+                    <input :aria-label="'Stock quantity for ' + s.name" type="number" v-model="s.stock_quantity" @change="updateServiceStock(s)" style="width:70px;padding:4px;border:1px solid var(--border);border-radius:4px" />
+                    <small style="color:var(--muted);font-size:0.7rem">(-1=∞)</small>
+                  </div>
+                </td>
+                <td data-label="Visibility" role="cell" class="staff-actions">
+                  <div style="display:flex;gap:0.4rem">
+                    <button class="btn btn-sm" style="background:var(--sand);color:var(--teal);border:1px solid var(--teal)" @click="editService(s)" type="button">Edit</button>
+                    <button class="btn btn-sm" :style="{ backgroundColor: s.is_active ? '#2d6a5f' : 'transparent', color: s.is_active ? 'white' : 'var(--teal)', border: '1px solid var(--teal)', minWidth: '80px' }" @click="toggleService(s)" type="button">
+                      {{ s.is_active ? 'Public' : 'Hidden' }}
+                    </button>
+                    <button class="btn btn-danger btn-sm" @click="deleteService(s)" type="button">Hide</button>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <div v-if="staffPagination.services.total" class="staff-pagination" role="group" aria-label="Service inventory pagination">
+            <p role="status">Showing {{ staffPagination.services.start }}&ndash;{{ staffPagination.services.end }} of {{ staffPagination.services.total }}</p>
+            <div><button type="button" :disabled="staffPagination.services.page===1" @click="changeStaffPage('services', -1)" aria-label="Previous service inventory page"><span aria-hidden="true">&larr;</span> Previous</button><span class="staff-page-number">Page {{ staffPagination.services.page }} of {{ staffPagination.services.pages }}</span><button type="button" :disabled="staffPagination.services.page===staffPagination.services.pages" @click="changeStaffPage('services', 1)" aria-label="Next service inventory page">Next <span aria-hidden="true">&rarr;</span></button></div>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <div class="table-header"><h3>Service Requests</h3><button type="button" class="btn btn-teal btn-sm" @click="openWalkInDialog('service')">+ Add walk-in service</button></div>
+          <table role="table" class="data-table">
+            <thead><tr role="row"><th role="columnheader" scope="col">Guest</th><th role="columnheader" scope="col">Service</th><th role="columnheader" scope="col">Price</th><th role="columnheader" scope="col">Date</th><th role="columnheader" scope="col">Status</th><th role="columnheader" scope="col">Payment</th><th role="columnheader" scope="col">Actions</th></tr></thead>
+            <tbody>
+              <tr role="row" v-for="a in staffPagination.requests.rows" :key="a.id">
+                <td data-label="Guest" role="cell">{{ a.guest_name || a.guestName || a.guest || a.user_name || (a.user && a.user.name) || a.email || '—' }}</td>
+                <td data-label="Service" role="cell">{{ a.service_name }}</td>
+                <td data-label="Price" role="cell">₱{{ Number(a.total_price).toLocaleString() }}</td>
+                <td data-label="Date" role="cell">{{ a.created_at ? a.created_at.slice(0,10) : '' }}</td>
+                <td data-label="Status" role="cell"><span class="status-chip" :class="'status-'+a.status">{{ a.status }}</span></td>
+                <td data-label="Payment" role="cell">{{ paymentStatusLabel(a) }}<small v-if="a.requested_payment_method==='cash'" class="booking-source-label">Pay at counter &middot; MFS-{{ a.id }}</small><small class="booking-source-label">Balance &#8369;{{ bookingMoney(a.balance_due) }}</small></td><td data-label="Actions" role="cell" class="staff-actions">
+                  <button type="button" class="staff-action" @click="openPaymentDialog(a, 'service')">{{ a.payment_review_status==='pending_review' ? 'Review payment' : 'Payments' }}</button>
+                  <button v-if="a.status === 'confirmed' && Number(a.balance_due)<=0" @click="updateAvailStatus(a.id, 'completed')" class="staff-action staff-action-confirm" type="button">✓ Complete</button>
+                  <button v-if="a.status!=='cancelled' && a.status!=='completed'" @click="deleteServiceAvail(a.id)" class="btn btn-danger btn-sm" type="button">Cancel</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <div v-if="staffPagination.requests.total" class="staff-pagination" role="group" aria-label="Service requests pagination">
+            <p role="status">Showing {{ staffPagination.requests.start }}&ndash;{{ staffPagination.requests.end }} of {{ staffPagination.requests.total }}</p>
+            <div><button type="button" :disabled="staffPagination.requests.page===1" @click="changeStaffPage('requests', -1)" aria-label="Previous service requests page"><span aria-hidden="true">&larr;</span> Previous</button><span class="staff-page-number">Page {{ staffPagination.requests.page }} of {{ staffPagination.requests.pages }}</span><button type="button" :disabled="staffPagination.requests.page===staffPagination.requests.pages" @click="changeStaffPage('requests', 1)" aria-label="Next service requests page">Next <span aria-hidden="true">&rarr;</span></button></div>
+          </div>
+          <div v-if="serviceAvails.length===0" style="text-align:center;padding:2rem;color:var(--muted)">No service requests yet.</div>
+        </div>
+      </div>
+
+      <!-- STAFF: MANAGE ROOMS -->
+      <div v-if="staffTab==='rooms'">
+        <div class="table-wrap">
+          <div class="table-header"><h3>Room Inventory</h3><button class="btn btn-teal btn-sm" @click="openAddRoom" type="button">+ Add New Room</button></div>
+          <table role="table" class="data-table">
+            <thead><tr role="row"><th role="columnheader" scope="col">Room</th><th role="columnheader" scope="col">Type</th><th role="columnheader" scope="col">Capacity</th><th role="columnheader" scope="col">Price/Night</th><th role="columnheader" scope="col">Status</th><th role="columnheader" scope="col">Actions</th></tr></thead>
+            <tbody>
+              <tr role="row" v-for="r in staffPagination.rooms.rows" :key="r.id">
+                <td data-label="Room" role="cell"><strong>{{ r.name }}</strong></td>
+                <td data-label="Type" role="cell">{{ r.type }}</td>
+                <td data-label="Capacity" role="cell">{{ r.capacity }} guests</td>
+                <td data-label="Price/Night" role="cell">₱{{ r.price_per_night.toLocaleString() }}</td>
+                <td data-label="Status" role="cell"><span class="status-chip" :class="statusClass(r.room_status)">{{ statusLabel(r.room_status) }}</span></td>
+                <td data-label="Actions" role="cell" class="staff-actions">
+                  <button class="btn btn-sm" style="background:var(--sand);color:var(--teal);border:1px solid var(--teal)" @click="editRoom(r)" type="button">Edit</button>
+                  <button class="btn btn-danger btn-sm" @click="deleteRoom(r)" type="button">Delete</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <div v-if="staffPagination.rooms.total" class="staff-pagination" role="group" aria-label="Room inventory pagination">
+            <p role="status">Showing {{ staffPagination.rooms.start }}&ndash;{{ staffPagination.rooms.end }} of {{ staffPagination.rooms.total }}</p>
+            <div><button type="button" :disabled="staffPagination.rooms.page===1" @click="changeStaffPage('rooms', -1)" aria-label="Previous room inventory page"><span aria-hidden="true">&larr;</span> Previous</button><span class="staff-page-number">Page {{ staffPagination.rooms.page }} of {{ staffPagination.rooms.pages }}</span><button type="button" :disabled="staffPagination.rooms.page===staffPagination.rooms.pages" @click="changeStaffPage('rooms', 1)" aria-label="Next room inventory page">Next <span aria-hidden="true">&rarr;</span></button></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- STAFF: MANAGE BOOKINGS -->
+      <div v-if="staffTab==='bookings'">
+        <div class="table-wrap">
+          <div class="table-header"><div><h2 id="staff-reservations-heading">Reservations</h2><p class="staff-result-count" role="status">{{ filteredStaffBookings.length }} of {{ allBookings.length }} reservations</p></div><button type="button" class="btn btn-teal btn-sm" @click="openWalkInDialog()">+ Add walk-in</button></div>
+          <div class="staff-booking-filters">
+            <label class="staff-search"><span>Search reservations</span><input type="search" v-model="staffBookingSearch" placeholder="Guest, room, or booking ID" /></label>
+            <label class="staff-status-filter"><span>Status</span><select v-model="staffBookingStatus"><option value="">All statuses</option><option value="pending">Pending</option><option value="confirmed">Confirmed</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option></select></label>
+          </div>
+          <table role="table" class="data-table" aria-labelledby="staff-reservations-heading">
+            <thead><tr role="row"><th role="columnheader" scope="col">Guest</th><th role="columnheader" scope="col">Room</th><th role="columnheader" scope="col">Check-in</th><th role="columnheader" scope="col">Check-out</th><th role="columnheader" scope="col">Status</th><th role="columnheader" scope="col">Total</th><th role="columnheader" scope="col">Payment</th><th role="columnheader" scope="col">Actions</th></tr></thead>
+            <tbody>
+              <tr role="row" v-for="b in staffPagination.bookings.rows" :key="b.id">
+                <td data-label="Guest" role="cell">{{ b.guestName }}</td>
+                <td data-label="Room" role="cell">{{ b.room }}</td>
+                <td data-label="Check-in" role="cell">{{ b.checkIn }}</td>
+                <td data-label="Check-out" role="cell">{{ b.checkOut }}</td>
+                <td data-label="Status" role="cell"><span class="status-chip" :class="'status-'+b.status">{{ b.status }}</span></td>
+                <td data-label="Total" role="cell">&#8369;{{ bookingMoney(b.total) }}<small v-if="b.booking_source==='walk_in'" class="booking-source-label">Walk-in</small></td><td data-label="Payment" role="cell"><strong>{{ paymentStatusLabel(b) }}</strong><small class="booking-source-label">Balance &#8369;{{ bookingMoney(b.balance_due) }}</small><small v-if="b.payment_review_status==='pending_review'" class="booking-source-label">Needs verification</small></td>
+                <td data-label="Actions" role="cell" class="staff-actions">
+                  <button type="button" class="staff-action" @click="openPaymentDialog(b)">{{ b.payment_review_status==='pending_review' ? 'Review deposit' : 'Payments' }}</button>
+                  <button v-if="b.status === 'confirmed' && Number(b.balance_due)<=0" @click="updateBookingStatus(b, 'completed')" class="staff-action staff-action-confirm" type="button">✓ Complete</button>
+
+                  <button v-if="b.status!=='cancelled' && b.status!=='completed'" @click="deleteBooking(b)" class="staff-delete" :aria-label="'Cancel reservation for ' + b.guestName" type="button">Cancel</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <div v-if="staffPagination.bookings.total" class="staff-pagination" role="group" aria-label="Reservations pagination">
+            <p role="status">Showing {{ staffPagination.bookings.start }}&ndash;{{ staffPagination.bookings.end }} of {{ staffPagination.bookings.total }}</p>
+            <div><button type="button" :disabled="staffPagination.bookings.page===1" @click="changeStaffPage('bookings', -1)" aria-label="Previous reservations page"><span aria-hidden="true">&larr;</span> Previous</button><span class="staff-page-number">Page {{ staffPagination.bookings.page }} of {{ staffPagination.bookings.pages }}</span><button type="button" :disabled="staffPagination.bookings.page===staffPagination.bookings.pages" @click="changeStaffPage('bookings', 1)" aria-label="Next reservations page">Next <span aria-hidden="true">&rarr;</span></button></div>
+          </div>
+          <div v-if="!filteredStaffBookings.length" class="staff-empty"><h3>{{ allBookings.length ? 'No matching reservations' : 'No reservations yet' }}</h3><p>{{ allBookings.length ? 'Try a different name, room, or status.' : 'Reservations will appear here when guests book.' }}</p><button v-if="staffBookingSearch || staffBookingStatus" type="button" class="staff-clear" @click="staffBookingSearch=''; staffBookingStatus=''">Clear filters</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BOOKING PAYMENTS -->
+  <div v-if="showPaymentDialog && paymentBooking" class="modal-overlay room-editor-overlay" @click.self="closePaymentDialogs">
+    <form class="room-editor payment-dialog" role="dialog" aria-modal="true" aria-labelledby="payment-dialog-title" @submit.prevent="saveBookingPayment(false)" @keydown="paymentDialogKeydown" :aria-busy="paymentBusy || paymentPhotoReading">
+      <header class="room-editor-header"><div><p class="room-editor-eyebrow">{{ paymentBooking.ref }} &middot; {{ paymentBooking.room }}</p><h2 id="payment-dialog-title">{{ currentUser?.role==='staff' ? 'Payments & verification' : paymentKind==='service' ? 'Your service payment' : 'Your deposit & payments' }}</h2><p>{{ paymentStatusLabel(paymentBooking) }} &middot; {{ paymentKind==='service' ? 'Request' : 'Reservation' }} {{ paymentBooking.status }}</p></div><button type="button" class="room-editor-close" data-payment-focus aria-label="Close payment details" :disabled="paymentBusy || paymentPhotoReading" @click="closePaymentDialogs">&times;</button></header>
+      <div class="room-editor-body">
+        <p v-if="paymentKind==='service'" class="room-editor-help">Quantity: {{ paymentBooking.quantity }}</p><dl class="payment-overview"><div><dt>{{ paymentKind==='service' ? 'Service total' : 'Reservation total' }}</dt><dd>&#8369;{{ bookingMoney(paymentBooking.total) }}</dd></div><div><dt>Received</dt><dd>&#8369;{{ bookingMoney(paymentBooking.amount_paid) }}</dd></div><div><dt>Balance</dt><dd>&#8369;{{ bookingMoney(paymentBooking.balance_due) }}</dd></div></dl>
+        <div v-if="paymentBooking.status==='pending'" class="payment-notice"><strong>{{ paymentKind==='service' ? 'Full payment required' : 'Deposit required' }}: &#8369;{{ bookingMoney(paymentBooking.deposit_due) }}</strong><p>{{ paymentBooking.payment_review_status==='pending_review' ? 'Submitted for verification. Your request remains on hold while staff review the payment.' : 'Pay by ' + paymentDeadline(paymentBooking.payment_due_at) }}</p></div>
+        <div v-if="paymentKind==='service' && paymentBooking.requested_payment_method==='cash' && paymentBooking.status==='pending' && paymentBooking.payment_status==='unpaid'" class="payment-notice" role="status"><strong>Pay at the counter selected</strong><p>Show <strong>{{ paymentBooking.ref }}</strong> to the cashier and pay &#8369;{{ bookingMoney(paymentBooking.balance_due) }} before {{ paymentDeadline(paymentBooking.payment_due_at) }}. No room or cottage booking is needed.</p><p>Your request is unpaid until staff record the payment.</p><button v-if="savedServiceCounterChoice && !editingServicePaymentMethod && paymentOptions.accounts.length" type="button" class="guest-text-button" @click="changeServicePaymentMethod">Change payment method</button></div><p v-if="paymentBooking.payment_review_note" class="payment-review-note">{{ paymentBooking.payment_review_note }}</p>
+        <template v-if="customerPaymentFormVisible">
+          <section v-if="paymentKind!=='service' || paymentForm.method!=='cash'" class="payment-account-section"><h3>{{ paymentKind==='service' ? 'Send the full payment to' : 'Send the deposit to' }}</h3><div v-for="account in paymentOptions.accounts" :key="account.method" class="payment-account"><div class="payment-account-brand"><strong><img v-if="paymentProviderLogo(account)" class="payment-provider-logo" :src="paymentProviderLogo(account)" :alt="account.label" width="136" height="44" decoding="async" /><span v-else>{{ account.label }}</span></strong><span class="payment-provider-type">{{ account.method==='gcash' ? 'E-wallet' : 'Bank transfer' }}</span></div><p>{{ account.name }}</p><p class="payment-account-number">{{ account.number }}</p></div><p v-if="!paymentOptions.accounts.length">Please contact the resort for payment instructions.</p></section>
+          <fieldset class="room-editor-section" :disabled="paymentBusy || paymentPhotoReading"><legend>{{ paymentKind==='service' ? 'Choose how to pay' : 'Submit your payment for review' }}</legend><p class="room-editor-help payment-form-help">{{ paymentKind==='service' && paymentForm.method==='cash' ? 'Pay the full amount at the resort counter before using the service. This choice does not mark your request paid.' : 'Sending a screenshot or reference does not verify payment. Staff must check that the funds reached the resort.' }}</p><div class="room-editor-grid"><div><label for="deposit-method">Payment method</label><select id="deposit-method" v-model="paymentForm.method"><option v-if="paymentKind==='service'" value="cash">Pay at the counter</option><option value="gcash">GCash</option><option value="bank_transfer">Bank transfer</option></select></div><div v-if="paymentKind!=='service' || paymentForm.method!=='cash'"><label for="deposit-reference">Transaction reference</label><input id="deposit-reference" v-model.trim="paymentForm.reference" minlength="3" maxlength="120" required /></div><div v-if="paymentKind!=='service' || paymentForm.method!=='cash'" class="room-editor-full"><label for="deposit-proof">Payment screenshot (optional)</label><input id="deposit-proof" type="file" accept="image/jpeg,image/png,image/webp" @change="readPaymentProof" /><p class="room-editor-help">JPG, PNG or WebP, up to 2 MB.</p><img v-if="paymentForm.proof" class="payment-proof-preview" :src="paymentForm.proof" alt="Payment screenshot preview" /></div></div></fieldset>
+        </template>
+        <template v-if="currentUser?.role==='staff'">
+          <section v-if="paymentBooking.payment_review_status==='pending_review'" class="payment-account-section"><h3>Customer submission</h3><p>{{ paymentBooking.submitted_payment_method }} &middot; {{ paymentBooking.submitted_payment_reference }}</p><p class="room-editor-help">Submitted {{ paymentDeadline(paymentBooking.payment_submitted_at) }}</p><img v-if="paymentBooking.payment_proof" :src="paymentBooking.payment_proof" alt="Customer payment screenshot — verify against the receiving account" class="payment-proof-preview" /><p class="payment-notice">Check the receiving GCash or bank account. The screenshot alone is not proof of receipt.</p></section>
+          <fieldset v-if="paymentBooking.balance_due>0 && paymentBooking.status!=='cancelled'" class="room-editor-section" :disabled="paymentBusy"><legend>Record money received</legend><div class="room-editor-grid"><div><label for="staff-payment-amount">Amount received (&#8369;)</label><input id="staff-payment-amount" type="number" min="0.01" step="0.01" :max="paymentBooking.balance_due" v-model="paymentForm.amount" required /></div><div><label for="staff-payment-method">Payment method</label><select id="staff-payment-method" v-model="paymentForm.method"><option value="cash">Cash at counter</option><option value="gcash">GCash</option><option value="bank_transfer">Bank transfer</option></select></div><div class="room-editor-full"><label for="staff-payment-reference">Transaction reference {{ paymentForm.method==='cash' ? '(optional)' : '' }}</label><input id="staff-payment-reference" v-model.trim="paymentForm.reference" :required="paymentForm.method!=='cash'" :minlength="paymentForm.method==='cash' ? 0 : 3" maxlength="120" /></div><label class="payment-verification room-editor-full" for="staff-payment-verified"><input id="staff-payment-verified" type="checkbox" v-model="paymentForm.verified" required /><span>I have checked and verified that this amount was received.</span></label></div></fieldset>
+          <section v-if="paymentBooking.payment_review_status==='pending_review'" class="payment-reject"><label for="payment-reject-note">If the payment cannot be verified</label><textarea id="payment-reject-note" v-model="paymentForm.note" rows="2" placeholder="Explain why the submission is rejected."></textarea><button type="button" class="guest-cancel" :disabled="paymentBusy || paymentForm.note.trim().length<3" @click="saveBookingPayment(true)">Reject submission</button><p class="room-editor-help">If the original deadline has passed, rejection releases this unpaid room hold.</p></section>
+        </template>
+        <section class="payment-history"><h3>Payment history</h3><p v-if="!paymentHistory.length" class="room-editor-help">No verified payments recorded.</p><article v-for="payment in paymentHistory" :key="payment.id"><div><strong>{{ payment.method }}</strong><p>{{ paymentDeadline(payment.created_at) }}</p><p v-if="payment.reference">Reference: {{ payment.reference }}</p></div><strong>&#8369;{{ bookingMoney(payment.amount) }}</strong></article></section>
+        <p v-if="paymentError" class="action-dialog-error" role="alert">{{ paymentError }}</p>
+      </div>
+      <footer class="room-editor-footer"><p>Only verified receipts count as paid.</p><div><button type="button" class="room-editor-cancel" :disabled="paymentBusy || paymentPhotoReading" @click="closePaymentDialogs">Close</button><button v-if="currentUser?.role==='staff' && paymentBooking.balance_due>0 && paymentBooking.status!=='cancelled' || customerPaymentFormVisible" type="submit" class="room-editor-save" :disabled="paymentBusy || paymentPhotoReading">{{ paymentBusy ? 'Saving…' : currentUser?.role==='staff' ? 'Record verified payment' : paymentKind==='service' && paymentForm.method==='cash' ? 'Save pay-at-counter choice' : 'Submit for verification' }}</button></div></footer>
+    </form>
+  </div>
+  <!-- WALK-IN COUNTER BOOKING -->
+  <div v-if="showWalkInDialog" class="modal-overlay room-editor-overlay" @click.self="closePaymentDialogs">
+    <form class="room-editor payment-dialog" role="dialog" aria-modal="true" aria-labelledby="walk-in-title" @submit.prevent="saveWalkIn" @keydown="paymentDialogKeydown" :aria-busy="paymentBusy">
+      <header class="room-editor-header"><div><p class="room-editor-eyebrow">COUNTER BOOKING</p><h2 id="walk-in-title">{{ walkInKind==='service' ? 'Walk-in service payment' : 'Add a walk-in guest' }}</h2><p>Create a confirmed request after verifying full payment.</p></div><button type="button" class="room-editor-close" data-payment-focus aria-label="Close walk-in form" :disabled="paymentBusy" @click="closePaymentDialogs">&times;</button></header>
+      <div class="room-editor-body"><fieldset class="room-editor-section" :disabled="paymentBusy"><legend>Guest &amp; stay</legend><div class="room-editor-grid">
+        <div><label for="walk-in-name">Guest name</label><input id="walk-in-name" v-model.trim="walkInForm.guest_name" minlength="2" maxlength="150" required /></div><div><label for="walk-in-phone">Phone (optional)</label><input id="walk-in-phone" type="tel" v-model.trim="walkInForm.guest_phone" maxlength="40" /></div>
+        <div class="room-editor-full"><label for="walk-in-room">{{ walkInKind==='service' ? 'Service' : 'Room' }}</label><select id="walk-in-room" v-model="walkInForm.room_id" required><option value="">{{ walkInKind==='service' ? 'Choose a service' : 'Choose a room' }}</option><option v-for="room in (walkInKind==='service' ? services.filter(s=>s.is_active) : rooms.filter(r=>r.is_available && r.room_status!=='under_maintenance'))" :key="room.id" :value="room.id">{{ room.name }} &middot; &#8369;{{ bookingMoney(walkInKind==='service' ? room.price : room.price_per_night) }} {{ walkInKind==='service' ? 'each' : '/ night' }}</option></select></div>
+        <div v-if="walkInKind!=='service'"><label for="walk-in-check-in">Check-in</label><input id="walk-in-check-in" type="date" v-model="walkInForm.check_in_date" :min="today" required /></div><div v-if="walkInKind!=='service'"><label for="walk-in-check-out">Check-out</label><input id="walk-in-check-out" type="date" v-model="walkInForm.check_out_date" :min="walkInForm.check_in_date || today" required /></div>
+        <div><label for="walk-in-guests">{{ walkInKind==='service' ? 'Quantity' : 'Guests' }}</label><input id="walk-in-guests" type="number" min="1" :max="walkInKind==='service' ? (walkInRoom?.stock_quantity!=null && Number(walkInRoom.stock_quantity)>=0 ? Number(walkInRoom.stock_quantity) : undefined) : walkInRoom?.capacity || 10" v-model="walkInForm.num_guests" required /></div>
+      </div></fieldset><fieldset class="room-editor-section" :disabled="paymentBusy"><legend>Full payment received</legend><div class="payment-notice"><strong>Total to collect: &#8369;{{ bookingMoney(walkInTotal) }}</strong><p>{{ walkInKind==='service' ? 'Full service price. No room resort fee is added.' : 'Includes the 10% resort fee.' }} Availability and the current rate are checked again when saving.</p></div><div class="room-editor-grid"><div><label for="walk-in-method">Payment method</label><select id="walk-in-method" v-model="walkInForm.payment_method"><option value="cash">Cash at counter</option><option value="gcash">GCash</option><option value="bank_transfer">Bank transfer</option></select></div><div><label for="walk-in-reference">Transaction reference</label><input id="walk-in-reference" v-model.trim="walkInForm.payment_reference" :required="walkInForm.payment_method!=='cash'" :minlength="walkInForm.payment_method==='cash' ? 0 : 3" maxlength="120" placeholder="Optional for cash" /></div><label class="payment-verification room-editor-full" for="walk-in-received"><input id="walk-in-received" type="checkbox" v-model="walkInForm.payment_received" required /><span>I have received and verified the full amount shown above.</span></label></div></fieldset><p v-if="paymentError" class="action-dialog-error" role="alert">{{ paymentError }}</p></div>
+      <footer class="room-editor-footer"><p>Staff-recorded counter payment</p><div><button type="button" class="room-editor-cancel" @click="closePaymentDialogs" :disabled="paymentBusy">Cancel</button><button type="submit" class="room-editor-save" :disabled="paymentBusy || !walkInForm.payment_received || walkInTotal<=0">{{ paymentBusy ? 'Saving…' : walkInKind==='service' ? 'Record payment & request' : 'Record payment & book' }}</button></div></footer>
+    </form>
+  </div>
+  <!-- SERVICE MODAL (Add/Edit) -->
+  <div v-if="showServiceAdminModal" class="modal-overlay room-editor-overlay" @click.self="closeServiceDialog">
+    <form class="room-editor service-editor" role="dialog" aria-modal="true" aria-labelledby="service-editor-title" aria-describedby="service-editor-description" @submit.prevent="saveService" @keydown="handleServiceDialogKeydown" :aria-busy="serviceEditorBusy">
+      <header class="room-editor-header"><div><p class="room-editor-eyebrow">SERVICE INVENTORY</p><h2 id="service-editor-title">{{ editingService ? 'Edit service' : 'Add a new service' }}</h2><p id="service-editor-description">Set the details, availability, and photo guests will see.</p></div><button type="button" class="room-editor-close" aria-label="Close service form" @click="closeServiceDialog" :disabled="serviceEditorBusy"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg></button></header>
+      <div class="room-editor-body">
+        <fieldset class="room-editor-section" :disabled="serviceEditorBusy"><legend>Service details</legend><div class="room-editor-grid">
+          <div><label for="service-editor-name">Service name <span aria-hidden="true">*</span></label><input id="service-editor-name" v-model.trim="serviceForm.name" placeholder="e.g. Day Entrance" required /></div>
+          <div><label for="service-editor-category">Category</label><input id="service-editor-category" v-model.trim="serviceForm.category" list="service-category-options" placeholder="e.g. day_service" /><datalist id="service-category-options"><option value="day_service">Day service</option><option value="bundle">Bundle</option></datalist></div>
+          <div><label for="service-editor-price">Price (₱) <span aria-hidden="true">*</span></label><input id="service-editor-price" type="number" v-model="serviceForm.price" min="0" step="0.01" inputmode="decimal" required /></div>
+          <div><label for="service-editor-stock">Stock quantity</label><input id="service-editor-stock" type="number" v-model="serviceForm.stock_quantity" min="-1" step="1" inputmode="numeric" aria-describedby="service-stock-help" required /><p id="service-stock-help" class="room-editor-help">Use -1 for unlimited availability.</p></div>
+          <div class="room-editor-full"><label for="service-editor-description-input">Description</label><textarea id="service-editor-description-input" v-model="serviceForm.description" rows="3" placeholder="Explain what's included and what guests can expect."></textarea></div>
+        </div></fieldset>
+        <fieldset class="room-editor-section" :disabled="serviceEditorBusy"><legend>Service photo</legend><p class="room-editor-help service-photo-help">Shown on the service card. JPG, PNG or WebP, up to 2 MB.</p>
+          <div v-if="serviceForm.image_url" class="service-editor-photo-preview"><img :src="serviceForm.image_url" :alt="serviceForm.name || 'Service photo preview'" /></div>
+          <button v-else type="button" class="service-photo-upload" @click="chooseServicePhoto"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8" cy="8" r="1.5"/><path d="m21 15-5-5L5 21"/></svg><strong>Add a service photo</strong><span>Choose a photo from your device</span></button>
+          <div v-if="serviceForm.image_url" class="service-photo-actions"><button type="button" @click="chooseServicePhoto">Replace photo</button><button type="button" class="service-photo-remove" @click="removeServicePhoto">Remove photo</button></div>
+          <input id="service-photo-input" class="room-editor-file-input" type="file" accept="image/jpeg,image/png,image/webp" tabindex="-1" aria-label="Choose a service photo" @change="handleServicePhoto" />
+          <p v-if="serviceImageReading" class="room-editor-help" role="status">Preparing photo…</p><p v-if="serviceImageError" class="service-photo-error" role="alert">{{ serviceImageError }}</p>
+        </fieldset>
+        <fieldset class="room-editor-section" :disabled="serviceEditorBusy"><legend>Visibility</legend><label class="service-editor-visibility" for="service-editor-visible"><input id="service-editor-visible" type="checkbox" role="switch" :aria-checked="serviceForm.is_active" v-model="serviceForm.is_active" /><span><strong>Visible to guests</strong><span>Turn off to keep this service in staff inventory only.</span></span></label></fieldset>
+      </div>
+      <footer class="room-editor-footer"><p><span aria-hidden="true">*</span> Required fields</p><div><button type="button" class="room-editor-cancel" @click="closeServiceDialog" :disabled="serviceEditorBusy">Cancel</button><button type="submit" class="room-editor-save" :disabled="serviceEditorBusy">{{ serviceImageReading ? 'Preparing photo…' : loading ? 'Saving…' : editingService ? 'Save changes' : 'Create service' }}</button></div></footer>
+    </form>
+  </div>
+  <!-- DELETE SERVICE MODAL -->
+  <div v-if="showDeleteServiceModal" class="modal-overlay action-dialog-overlay" @click.self="closeActionDialog">
+    <section class="action-dialog" role="alertdialog" aria-modal="true" aria-labelledby="delete-service-title" aria-describedby="delete-service-description" @keydown="handleActionDialogKeydown">
+      <header><span class="action-dialog-icon" aria-hidden="true"><svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v6M12 17h.01"/></svg></span><button type="button" class="action-dialog-close" aria-label="Close confirmation" :disabled="actionDialogBusy" @click="closeActionDialog"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg></button></header>
+      <h2 id="delete-service-title">Hide this service?</h2><p id="delete-service-description" class="action-dialog-message">This hides &ldquo;{{ pendingDeleteService.name }}&rdquo; from guests. Request and payment history will be retained. You can make it public again from the inventory.</p>
+
+      <footer><button type="button" class="action-dialog-safe" data-safe-action :disabled="actionDialogBusy" @click="closeActionDialog">Keep service</button><button type="button" class="action-dialog-confirm" :disabled="actionDialogBusy" @click="confirmDeleteService">{{ actionDialogBusy ? 'Please wait?' : 'Hide service' }}</button></footer>
+    </section>
+  </div>
+
+  <main v-if="page==='confirm'" class="page reservation-confirmation" v-cloak>
+    <div class="container">
+      <article class="reservation-receipt" aria-labelledby="reservation-success-heading">
+        <header class="reservation-success-header">
+          <span class="reservation-success-icon" aria-hidden="true"><svg width="27" height="27" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><template v-if="lastBooking.status==='pending'"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></template><path v-else-if="lastBooking.status==='cancelled'" d="m6 6 12 12M6 18 18 6"/><path v-else d="m5 12 4 4L19 6"/></svg></span>
+          <p class="reservation-success-kicker">{{ lastBooking.status==='pending' ? 'DEPOSIT REQUIRED' : lastBooking.status==='cancelled' ? 'RESERVATION CANCELLED' : 'RESERVATION CONFIRMED' }}</p>
+          <h1 id="reservation-success-heading">{{ lastBooking.status==='pending' ? 'Your room is on hold.' : lastBooking.status==='cancelled' ? 'Reservation cancelled.' : 'Your stay is confirmed.' }}</h1>
+          <p>{{ lastBooking.status==='pending' ? 'Pay the 50% deposit within 3 hours. Your booking is confirmed after staff verify the payment.' : lastBooking.status==='cancelled' ? 'This reservation is no longer holding a room.' : 'We look forward to welcoming you to the resort.' }}</p>
+        </header>
+        <div class="reservation-reference"><div><p>Booking reference</p><code>{{ lastBooking.ref || '—' }}</code></div><button v-if="lastBooking.ref" type="button" @click="copyBookingReference" :aria-label="bookingReferenceCopied ? 'Booking reference copied' : 'Copy booking reference'"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V4H4v12h4"/></svg>{{ bookingReferenceCopied ? 'Copied' : 'Copy' }}</button><span class="reservation-sr-only" role="status">{{ bookingReferenceCopied ? 'Booking reference copied to clipboard.' : '' }}</span></div>
+        <section class="reservation-summary" aria-labelledby="reservation-room-heading"><p class="reservation-room-label">YOUR ROOM</p><h2 id="reservation-room-heading">{{ lastBooking.room }}</h2>
+          <dl class="reservation-facts"><div><dt>Check-in</dt><dd><time :datetime="lastBooking.checkIn">{{ formatGuestDate(lastBooking.checkIn) }}</time></dd></div><div><dt>Check-out</dt><dd><time :datetime="lastBooking.checkOut">{{ formatGuestDate(lastBooking.checkOut) }}</time></dd></div><div><dt>Guests</dt><dd>{{ lastBooking.guests }} {{ Number(lastBooking.guests)===1 ? 'guest' : 'guests' }}</dd></div></dl>
+          <div class="reservation-total"><div><h3>Reservation total</h3><p>Includes the 10% resort fee.</p></div><strong>₱{{ Number(lastBooking.total || 0).toLocaleString('en-PH') }}</strong></div>
+        <dl class="reservation-payment-summary"><div><dt>Payment status</dt><dd>{{ paymentStatusLabel(lastBooking) }}</dd></div><div><dt>Amount received</dt><dd>&#8369;{{ bookingMoney(lastBooking.amount_paid) }}</dd></div><div><dt>{{ lastBooking.status==='pending' ? 'Outstanding balance' : 'Balance due at check-in' }}</dt><dd>&#8369;{{ bookingMoney(lastBooking.balance_due) }}</dd></div><div v-if="lastBooking.status==='pending'"><dt>Deposit required now</dt><dd>&#8369;{{ bookingMoney(lastBooking.deposit_due) }}</dd></div></dl><p v-if="lastBooking.status==='pending'" class="booking-payment-deadline">{{ lastBooking.payment_review_status==='pending_review' ? 'Payment submitted for staff verification.' : 'Pay by ' + paymentDeadline(lastBooking.payment_due_at) }}</p><button v-if="lastBooking.status==='pending'" type="button" class="detail-book-button" @click="openPaymentDialog(lastBooking)">Deposit instructions &amp; submission</button></section>
+        <footer class="reservation-receipt-footer"><p>Keep your booking reference handy for your visit.</p><div class="reservation-next-actions"><button type="button" class="reservation-primary" @click="dashTab='upcoming'; navigate('dashboard')">{{ currentUser?.role==='staff' ? 'View reservations' : 'View my bookings' }} <span aria-hidden="true">&rarr;</span></button><button type="button" class="reservation-secondary" @click="navigate('rooms')">Explore more rooms</button></div></footer>
+      </article>
+    </div>
+  </main>
+  <!-- SERVICE COUNTER CHOICE CONFIRMATION -->
+  <main v-if="page==='service-confirm' && lastCounterService" class="page reservation-confirmation">
+    <div class="container">
+      <article class="reservation-receipt" aria-labelledby="service-counter-confirm-heading">
+        <header class="reservation-success-header">
+          <span class="reservation-success-icon" aria-hidden="true"><svg width="27" height="27" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 4 4L19 6"/></svg></span>
+          <p class="reservation-success-kicker">COUNTER PAYMENT CHOICE SAVED</p>
+          <h1 id="service-counter-confirm-heading" tabindex="-1">Your service request is saved.</h1>
+          <p>Show your reference to the cashier when you arrive. No room or cottage booking is needed.</p>
+        </header>
+        <div class="reservation-reference"><div><p>Service request reference</p><code>{{ lastCounterService.ref }}</code></div><span class="payment-provider-type">Pay at the counter</span></div>
+        <section class="reservation-summary" aria-labelledby="service-counter-name"><p class="reservation-room-label">YOUR SERVICE</p><h2 id="service-counter-name">{{ lastCounterService.room }}</h2>
+          <dl class="reservation-facts"><div><dt>Quantity</dt><dd>{{ lastCounterService.quantity }}</dd></div><div><dt>Payment status</dt><dd>Unpaid</dd></div></dl>
+          <div class="reservation-total"><div><h3>Amount to pay at the counter</h3><p>No payment has been received yet.</p></div><strong>&#8369;{{ bookingMoney(lastCounterService.balance_due) }}</strong></div>
+          <div class="payment-notice"><strong>Pay by {{ paymentDeadline(lastCounterService.payment_due_at) }}</strong><p>The request stays pending until staff record the full payment. An unpaid request is released after this deadline.</p></div>
+        </section>
+        <footer class="reservation-receipt-footer"><div class="reservation-next-actions"><button type="button" class="reservation-primary" @click="viewServiceRequests">View my service requests <span aria-hidden="true">&rarr;</span></button><button type="button" class="reservation-secondary" @click="navigate('services')">Browse services</button></div></footer>
+      </article>
+    </div>
+  </main>
+  <!-- ROOM MODAL (Add/Edit) -->
+  <div v-if="showRoomModal" class="modal-overlay room-editor-overlay" @click.self="closeRoomDialog">
+    <form id="room-editor-dialog" class="room-editor" role="dialog" aria-modal="true" aria-labelledby="room-editor-title" aria-describedby="room-editor-description" @submit.prevent="saveRoom" @keydown="handleRoomDialogKeydown" :aria-busy="roomEditorBusy">
+      <header class="room-editor-header"><div><p class="room-editor-eyebrow">ROOM INVENTORY</p><h2 id="room-editor-title">{{ editingRoom ? 'Edit room' : 'Add a new room' }}</h2><p id="room-editor-description">{{ editingRoom ? 'Update room details, rates, and photos.' : 'Set up the details guests will see when browsing rooms.' }}</p></div><button type="button" class="room-editor-close" aria-label="Close room form" @click="closeRoomDialog" :disabled="roomEditorBusy"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg></button></header>
+      <div class="room-editor-body">
+        <fieldset class="room-editor-section" :disabled="roomEditorBusy"><legend>Room essentials</legend><div class="room-editor-grid">
+          <div><label for="editor-room-number">Room number <span aria-hidden="true">*</span></label><input id="editor-room-number" v-model.trim="roomForm.room_number" placeholder="e.g. 101" required /></div>
+          <div><label for="editor-room-name">Room name <span aria-hidden="true">*</span></label><input id="editor-room-name" v-model.trim="roomForm.name" placeholder="e.g. Garden Room" required /></div>
+          <div><label for="editor-room-type">Room type</label><select id="editor-room-type" v-model="roomForm.type"><option>Standard</option><option>Themed</option><option>Deluxe</option><option>Suite</option></select></div>
+          <div><label for="editor-room-capacity">Guest capacity</label><input id="editor-room-capacity" type="number" v-model="roomForm.capacity" min="1" max="10" inputmode="numeric" required /></div>
+        </div></fieldset>
+        <fieldset class="room-editor-section" :disabled="roomEditorBusy"><legend>Rates &amp; availability</legend><div class="room-editor-grid">
+          <div><label for="editor-room-price">Nightly rate (₱) <span aria-hidden="true">*</span></label><input id="editor-room-price" type="number" v-model="roomForm.price_per_night" min="0.01" step="0.01" inputmode="decimal" placeholder="e.g. 1500" required /></div>
+          <div><label for="editor-room-status">Room status</label><select id="editor-room-status" v-model="roomForm.room_status"><option value="available">Available</option><option value="fully_booked">Fully booked</option><option value="under_maintenance">Under maintenance</option></select></div>
+        </div></fieldset>
+        <fieldset class="room-editor-section" :disabled="roomEditorBusy"><legend>About the room</legend><div class="room-editor-grid">
+          <div class="room-editor-full"><label for="editor-room-description">Description</label><textarea id="editor-room-description" v-model="roomForm.description" rows="3" placeholder="Describe the space, the setting, and what guests can expect."></textarea></div>
+          <div><label for="editor-room-size">Floor area (m²) <span class="room-editor-optional">optional</span></label><input id="editor-room-size" type="number" v-model="roomForm.sqm" min="1" inputmode="numeric" placeholder="e.g. 28" /></div>
+          <div><label for="editor-room-amenities">Amenities</label><input id="editor-room-amenities" v-model="roomForm.amenities" placeholder="Wi-Fi, Air conditioning, TV" aria-describedby="editor-amenities-help" /><p id="editor-amenities-help" class="room-editor-help">Separate each amenity with a comma.</p></div>
+        </div></fieldset>
+        <fieldset class="room-editor-section room-editor-photos" :disabled="roomEditorBusy"><legend>Room photos</legend><p class="room-editor-help">Add up to 5 photos. The first photo is the room's cover.</p><div class="room-editor-photo-grid">
+          <div v-for="i in [1,2,3,4,5]" :key="i" class="room-editor-photo" :class="{'is-cover':i===1}">
+            <div class="room-editor-photo-caption">{{ i===1 ? 'Cover photo' : 'Photo ' + i }}</div>
+            <template v-if="roomForm['image_url' + (i===1?'':'_'+i)]"><div class="room-editor-preview"><img :src="roomForm['image_url' + (i===1?'':'_'+i)]" :alt="'Room photo ' + i" /></div><div class="room-editor-photo-actions"><button type="button" @click="triggerUpload(i)" :aria-label="'Replace photo ' + i">Replace</button><button type="button" class="room-editor-remove" @click="removeImage(i)" :aria-label="'Remove photo ' + i">Remove</button></div></template>
+            <button v-else type="button" class="room-editor-add-photo" @click="triggerUpload(i)" :aria-label="'Upload ' + (i===1 ? 'cover photo' : 'photo ' + i)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8" cy="8" r="1.5"/><path d="m21 15-5-5L5 21"/></svg><span>Add photo</span></button>
+            <input type="file" :id="'file-input-' + i" class="room-editor-file-input" tabindex="-1" :aria-label="'Choose room photo ' + i" accept="image/*" @change="handleFileUpload($event, i)" />
+          </div>
+        </div></fieldset>
+      </div>
+      <footer class="room-editor-footer"><p><span aria-hidden="true">*</span> Required fields</p><div><button type="button" class="room-editor-cancel" @click="closeRoomDialog" :disabled="roomEditorBusy">Cancel</button><button type="submit" class="room-editor-save" :disabled="roomEditorBusy">{{ roomImageUploads > 0 ? 'Uploading photos…' : loading ? 'Saving…' : editingRoom ? 'Save changes' : 'Create room' }}</button></div></footer>
+    </form>
+  </div>
+  <!-- CANCEL RESERVATION -->
+  <div v-if="showCancelBookingModal" class="modal-overlay action-dialog-overlay" @click.self="closeActionDialog">
+    <section class="action-dialog" role="alertdialog" aria-modal="true" aria-labelledby="cancel-reservation-title" aria-describedby="cancel-reservation-description" @keydown="handleActionDialogKeydown">
+      <header><span class="action-dialog-icon" aria-hidden="true"><svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v6M12 17h.01"/></svg></span><button type="button" class="action-dialog-close" aria-label="Close confirmation" :disabled="actionDialogBusy" @click="closeActionDialog"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg></button></header>
+      <h2 id="cancel-reservation-title">Cancel your reservation?</h2><p id="cancel-reservation-description" class="action-dialog-message">This cancels your reservation. Recorded payments remain on file; contact the resort about any refund.</p>
+      <dl class="action-dialog-booking" v-if="pendingCancelBooking"><div><dt>Room</dt><dd>{{ pendingCancelBooking.room }}</dd></div><div><dt>Stay</dt><dd>{{ formatGuestDate(pendingCancelBooking.checkIn) }} &ndash; {{ formatGuestDate(pendingCancelBooking.checkOut) }}</dd></div></dl><p v-if="bookingCancellationError" class="action-dialog-error" role="alert">{{ bookingCancellationError }}</p>
+      <footer><button type="button" class="action-dialog-safe" data-safe-action :disabled="actionDialogBusy" @click="closeActionDialog">Keep reservation</button><button type="button" class="action-dialog-confirm" :disabled="actionDialogBusy" @click="confirmCancelBooking">{{ actionDialogBusy ? 'Please wait?' : 'Yes, cancel' }}</button></footer>
+    </section>
+  </div>
+
+  <!-- DELETE MODAL -->
+  <div v-if="showDeleteModal" class="modal-overlay action-dialog-overlay" @click.self="closeActionDialog">
+    <section class="action-dialog" role="alertdialog" aria-modal="true" aria-labelledby="delete-request-title" aria-describedby="delete-request-description" @keydown="handleActionDialogKeydown">
+      <header><span class="action-dialog-icon" aria-hidden="true"><svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v6M12 17h.01"/></svg></span><button type="button" class="action-dialog-close" aria-label="Close confirmation" :disabled="actionDialogBusy" @click="closeActionDialog"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg></button></header>
+      <h2 id="delete-request-title">Cancel this service request?</h2><p id="delete-request-description" class="action-dialog-message">This cancels the request and releases reserved stock. Payment history is retained; any refund must be handled separately.</p>
+
+      <footer><button type="button" class="action-dialog-safe" data-safe-action :disabled="actionDialogBusy" @click="closeActionDialog">Keep request</button><button type="button" class="action-dialog-confirm" :disabled="actionDialogBusy" @click="confirmDeleteServiceAvail">{{ actionDialogBusy ? 'Please wait?' : 'Cancel request' }}</button></footer>
+    </section>
+  </div>
+
+  <!-- DELETE ROOM MODAL -->
+  <div v-if="showDeleteRoomModal" class="modal-overlay action-dialog-overlay" @click.self="closeActionDialog">
+    <section class="action-dialog" role="alertdialog" aria-modal="true" aria-labelledby="delete-room-title" aria-describedby="delete-room-description" @keydown="handleActionDialogKeydown">
+      <header><span class="action-dialog-icon" aria-hidden="true"><svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v6M12 17h.01"/></svg></span><button type="button" class="action-dialog-close" aria-label="Close confirmation" :disabled="actionDialogBusy" @click="closeActionDialog"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg></button></header>
+      <h2 id="delete-room-title">Delete this room?</h2><p id="delete-room-description" class="action-dialog-message">This removes &ldquo;{{ pendingDeleteRoom.name }}&rdquo; from the room inventory. This cannot be undone.</p>
+
+      <footer><button type="button" class="action-dialog-safe" data-safe-action :disabled="actionDialogBusy" @click="closeActionDialog">Keep room</button><button type="button" class="action-dialog-confirm" :disabled="actionDialogBusy" @click="confirmDeleteRoom">{{ actionDialogBusy ? 'Please wait?' : 'Delete room' }}</button></footer>
+    </section>
+  </div>
+
+  <!-- DELETE BOOKING MODAL -->
+  <div v-if="showDeleteBookingModal" class="modal-overlay action-dialog-overlay" @click.self="closeActionDialog">
+    <section class="action-dialog" role="alertdialog" aria-modal="true" aria-labelledby="delete-booking-title" aria-describedby="delete-booking-description" @keydown="handleActionDialogKeydown">
+      <header><span class="action-dialog-icon" aria-hidden="true"><svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v6M12 17h.01"/></svg></span><button type="button" class="action-dialog-close" aria-label="Close confirmation" :disabled="actionDialogBusy" @click="closeActionDialog"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg></button></header>
+      <h2 id="delete-booking-title">Cancel this reservation?</h2><p id="delete-booking-description" class="action-dialog-message">This cancels the reservation and releases the room. Payment records are retained; any refund must be handled separately.</p>
+
+      <footer><button type="button" class="action-dialog-safe" data-safe-action :disabled="actionDialogBusy" @click="closeActionDialog">Keep reservation</button><button type="button" class="action-dialog-confirm" :disabled="actionDialogBusy" @click="confirmDeleteBooking">{{ actionDialogBusy ? 'Please wait?' : 'Cancel reservation' }}</button></footer>
+    </section>
+  </div>
+
+  <!-- SERVICE MODAL REMOVED TO PREVENT TRACKING PROTECTION BLOCK GLITCHES -->
+
+
+  <div v-if="showForgotPassword" class="modal-overlay" @click.self="showForgotPassword=false">
+    <div class="modal" style="max-width:420px">
+      <h3>Forgot Password</h3>
+      <p style="color:var(--muted);font-size:0.9rem;line-height:1.6">Enter your email and we’ll send you a password reset link.</p>
+      <div class="form-group" style="margin-top:1rem">
+        <label>Email</label>
+        <input v-model="forgotEmail" placeholder="you@example.com" />
+      </div>
+      <div v-if="forgotMsg" :class="['auth-msg', forgotMsgType]" style="margin-top:0.75rem">{{ forgotMsg }}</div>
+      <div style="display:flex;gap:1rem;justify-content:flex-end;margin-top:1.25rem">
+        <button class="btn" style="background:var(--sand);color:var(--text)" @click="showForgotPassword=false">Cancel</button>
+        <button class="btn btn-teal" @click="doForgotPassword">Send Link</button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ABOUT US -->
+  <div v-if="page==='about'" class="page">
+    <div class="about-hero">
+      <div class="hero-eyebrow">Our Story</div>
+      <h1>Welcome to<br><em>Minnie's Farm Resort</em></h1>
+      <p>A peaceful sanctuary where nature, comfort, and genuine hospitality come together for an unforgettable escape.</p>
+    </div>
+    <div class="container">
+      <div class="about-section">
+        <div class="about-grid">
+          <div class="about-img-block" style="background:none;padding:0;overflow:hidden"><img src="https://i.imgur.com/bstDhTk.jpg" style="width:100%;height:100%;object-fit:cover;border-radius:20px;" /></div>
+          <div class="about-text">
+            <h2>A <em>Family Dream</em><br>Turned Into Reality</h2>
+            <p>Welcome to Minnie's Farm Resort, a hidden gem in the peaceful town of Basud, Camarines Norte. Our story began with a simple idea: to create a place where families and friends could escape the hustle of city life and reconnect with nature.</p>
+            <p>Founded by Maximana Morales and her family, the resort has grown from a humble farmhouse into a full retreat that blends rustic charm with modern comfort.</p>
+            <p>Today, we welcome guests from all over to experience the simple joys of farm life — morning harvests, open skies, and home-cooked meals made from our very own garden.</p>
+          </div>
+        </div>
+      </div>
+      <div class="about-section">
+        <div class="about-grid" style="direction:rtl">
+          <div class="about-img-block" style="direction:ltr;background:none;padding:0;overflow:hidden"><img src="https://i.imgur.com/s4YVInI.jpg" style="width:100%;height:100%;object-fit:cover;border-radius:20px;" /></div>
+          <div class="about-text" style="direction:ltr">
+            <h2>More Than a <em>Resort</em> —<br>It's a Home Away</h2>
+            <p>Forget the typical hotel stay; Minnie's Farm Resort is all about the great outdoors and good times.</p>
+            <p>Our rooms are thoughtfully designed to reflect the warmth of a family home — wooden accents, cozy bedding, and windows that frame the natural beauty surrounding the property.</p>
+            <p>We believe every guest deserves to feel like family, and that's exactly how we treat everyone who stays with us.</p>
+          </div>
+        </div>
+      </div>
+      <section class="about-section farm-life" aria-labelledby="farm-life-heading">
+        <header class="farm-life-intro">
+          <p class="farm-life-kicker">A STAY WITH US</p>
+          <h2 id="farm-life-heading">Life at<br><em>Minnie's.</em></h2>
+          <p class="farm-life-summary">A family-run resort in Basud, with room to rest, spend time together, and enjoy the outdoors.</p>
+          <p class="farm-life-location">Matnog, Basud<br>Camarines Norte</p>
+        </header>
+        <ul class="farm-life-details">
+          <li>
+            <h3>Family-owned, personally cared for.</h3>
+            <p>This is our family's place. We take care of it, and the people who stay here, with that in mind.</p>
+          </li>
+          <li>
+            <h3>A warm welcome.</h3>
+            <p>Need a hand or a local recommendation? Just ask. We're here to help you settle in.</p>
+          </li>
+          <li>
+            <h3>Time to do less.</h3>
+            <p>Sleep in, find a quiet spot, or spend an afternoon outside. There's no need to fill every hour.</p>
+          </li>
+          <li>
+            <h3>Care for our surroundings.</h3>
+            <p>Less waste, thoughtful farming, and care for the land that makes this place what it is.</p>
+          </li>
+          <li>
+            <h3>The sari-sari store.</h3>
+            <p>Pick up snacks, drinks, and a few everyday essentials at our on-site store.</p>
+          </li>
+          <li>
+            <h3>One more song.</h3>
+            <p>Get everyone together at the karaoke area. A few familiar songs always make a good evening.</p>
+          </li>
+        </ul>
+      </section>
+      <section class="about-section resort-team" aria-labelledby="team-heading">
+        <header class="team-heading">
+          <div>
+            <p class="team-kicker">THE PEOPLE BEHIND THE PLACE</p>
+            <h2 id="team-heading">Meet the team.</h2>
+          </div>
+          <p>A family dream, brought to life by the people who care for it.</p>
+        </header>
+        <div class="team-grid">
+          <article class="team-profile" v-for="member in teamMembers" :key="member.name">
+            <div class="team-portrait" role="img" :aria-label="'Portrait of ' + member.name">
+              <span class="team-initials" aria-hidden="true">{{ member.initials }}</span>
+              <img v-if="member.photo" :src="member.photo" alt="" class="team-photo" loading="lazy" decoding="async" referrerpolicy="no-referrer" @error="$event.target.style.display='none'" />
+            </div>
+            <div class="team-bio">
+              <p class="team-role">{{ member.role }}</p>
+              <h3 class="team-name">{{ member.name }}</h3>
+              <p class="team-desc">{{ member.desc }}</p>
+            </div>
+          </article>
+        </div>
+      </section>
+      <section class="about-section booking-section" aria-labelledby="stay-invite-heading">
+        <div class="stay-invite">
+          <div class="stay-invite-copy">
+            <p class="stay-invite-kicker">STAY AT MINNIE'S</p>
+            <h2 id="stay-invite-heading">Make yourself at home.</h2>
+            <p class="stay-invite-description">Explore our rooms and find a space for your next visit.</p>
+          </div>
+          <div class="stay-invite-action"><button type="button" class="stay-invite-button" @click="navigate('rooms')">Browse rooms <span aria-hidden="true">&rarr;</span></button><p>Matnog, Basud &middot; Camarines Norte</p></div>
+        </div>
+      </section>
+      <section class="about-section resort-contact" aria-labelledby="contact-heading">
+        <header class="contact-heading">
+          <div>
+            <p class="contact-kicker">COME BY OR GIVE US A CALL</p>
+            <h2 id="contact-heading">Find us in Basud.</h2>
+          </div>
+          <p>Planning a visit? Here's where to find us and how to get in touch.</p>
+        </header>
+        <div class="contact-grid">
+          <figure class="contact-map">
+            <iframe
+              title="Location of Minnie's Farm Resort in Matnog, Basud"
+              src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3945.794396805764!2d122.95109599999999!3d14.065100199999998!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x3398a986085bbb6f%3A0x95c61727814fedac!2sMinnies%20Resort!5e1!3m2!1sen!2sph!4v1772980603417!5m2!1sen!2sph"
+              allowfullscreen loading="lazy" referrerpolicy="no-referrer-when-downgrade">
+            </iframe>
+            <figcaption>Minnie's Farm Resort &middot; Matnog, Basud</figcaption>
+          </figure>
+          <div class="contact-details">
+            <dl class="contact-list">
+              <div class="contact-row">
+                <dt>Visit us</dt>
+                <dd><address>Purok 1, Matnog, Basud<br>4608 Camarines Norte</address></dd>
+              </div>
+              <div class="contact-row">
+                <dt>Call us</dt>
+                <dd><a class="contact-phone" href="tel:+639666619229">0966 661 9229</a></dd>
+              </div>
+              <div class="contact-row">
+                <dt>Opening hours</dt>
+                <dd><span class="contact-hours">Daily, 7:00 AM &ndash; 9:00 PM</span><span class="contact-note">Day guests must exit by 8:00 PM.</span></dd>
+              </div>
+            </dl>
+            <a class="contact-directions" href="https://maps.google.com/maps?q=Minnies+Resort+Basud+Camarines+Norte" target="_blank" rel="noopener noreferrer">Get directions <span aria-hidden="true">&#8599;</span><span class="contact-sr-only"> in Google Maps (opens in a new tab)</span></a>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+</div>
+<script src="assets/js/app.js?v=4.6"></script>
+</body>
+</html>

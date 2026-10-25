@@ -4,7 +4,7 @@ Hi, I'm Mick — a full-stack developer focused on building practical web apps f
 
 This repository contains the **Minnie's Farm Resort** room booking website.
 
-- **Frontend:** Static HTML/CSS + Vue (loaded via `index.html`, logic in `app.js`)
+- **Frontend:** Static HTML/CSS + Vue (loaded via `public/index.html`, logic in `public/assets/js/app.js`)
 - **Backend API:** Flask app deployed as a Vercel Serverless Function (`api/index.py`)
 - **Database:** Supabase (PostgREST)
 
@@ -13,9 +13,9 @@ This repository contains the **Minnie's Farm Resort** room booking website.
 ### Frontend (client)
 The UI is a single-page experience controlled by Vue state.
 
-- `index.html` defines the page structure (Home, Rooms, Room Detail, Services, Dashboards, modals).
-- `app.js` holds the Vue app state and calls the backend API using `fetch()`.
-- `style.css` provides the styling and responsive layout.
+- `public/index.html` defines the page structure (Home, Rooms, Room Detail, Services, Dashboards, modals).
+- `public/assets/js/app.js` holds the Vue app state and calls the backend API using `fetch()`.
+- `public/assets/css/style.css` provides the styling and responsive layout.
 
 The frontend talks to the backend via `API_URL`.
 
@@ -55,6 +55,8 @@ Tables include (names may vary depending on your Supabase project):
 The backend uses `SUPABASE_URL` and `SUPABASE_KEY` to communicate with Supabase.
 
 ## Deployment (Vercel)
+
+For manual deposits, payment verification, and walk-in counter bookings, follow [payment setup](docs/payment-setup.md), including the required SQL migration and receiving-account environment variables.
 This repo is designed to deploy to Vercel.
 
 - Requests to `/api/*` are routed to the Flask serverless function (`api/index.py`).
@@ -68,7 +70,11 @@ pip install -r requirements.txt
 ```
 
 ### 2) Set environment variables
-Create a `.env` file in the project root (this repo ignores `.env` via `.gitignore`).
+Copy `.env.example` to `.env` in the project root, then replace the placeholder values (this repo ignores `.env` via `.gitignore`).
+
+```powershell
+Copy-Item .env.example .env
+```
 
 Required variables:
 - `SUPABASE_URL` — your Supabase project URL
@@ -77,7 +83,7 @@ Required variables:
 
 Optional:
 - `DEBUG=1` — enables additional backend logging
-- `SENDGRID_API_KEY` — required only if you wire up real email delivery
+- `SENDGRID_API_KEY` — enables the email delivery integration
 - `FROM_EMAIL` — sender email for outgoing messages
 - `FRONTEND_URL` — your deployed frontend URL, for example `https://yourdomain.com/`
 
@@ -92,27 +98,63 @@ FRONTEND_URL=https://your-app.vercel.app/
 
 This project books rooms directly through the normal booking API and does not use Stripe Checkout.
 
+### Service photos
+
+Before saving service photos, run `database/migrations/20261025_service_images.sql` in your Supabase SQL Editor. This adds the optional `services.image_url` column without changing existing services.
+
+Staff can add, replace, or remove a service photo in **Dashboard → Services → Add service / Edit**. Supported uploads are JPG, PNG, and WebP up to 2 MB. Photos are saved as data URLs in the database, using the same approach as the existing room photos. The service card uses the saved photo when available.
+
 ### 3) Run the API locally
 ```bash
 python api/index.py
 ```
 
-Then open `index.html` via a local static server (recommended) or your IDE live server.
+Then visit `http://localhost:5000/`. Flask serves the website from `public/` and the API from `/api`.
 
 ## Security notes
 - Do **not** commit `.env` files or any keys.
-- Do **not** put Supabase keys or JWT secrets directly into `app.js` or `index.html`.
+- Do **not** put Supabase keys or JWT secrets directly into `public/assets/js/app.js` or `public/index.html`.
 - If Supabase RLS is enabled, ensure you have the correct policies for:
   - Reading/writing `reviews`
   - Reading/writing `service_avails`
   - Any other tables you access from the API
 
 ## Project files
-- `index.html` — main UI
-- `app.js` — Vue app logic + API calls
-- `style.css` — styling + responsive behavior
+
+```text
+Minnies Resort/
+  public/                 Website files served to browsers
+    index.html            Main Vue interface
+    privacy.html          Privacy policy
+    assets/
+      css/style.css       Styles and responsive layout
+      js/app.js           Frontend behavior and API calls
+      images/             Logos and payment provider images
+  api/
+    index.py              Flask and Vercel entrypoint
+    services/             Active payment, notification, and email modules
+    legacy/               Earlier implementation, retained for reference
+    requirements.txt      Backend dependencies
+  docs/                   Setup and integration guides
+  tests/                  Local structure and routing checks
+  .env                    Local secrets (ignored by Git)
+  requirements.txt        Deployment dependencies
+  vercel.json             Hosting configuration
+```
+
+Keep the Vercel project root at this repository root. `vercel.json` sets `public/` as the static output directory and preserves `/api/*` routing. Public addresses remain `/`, `/privacy.html`, and `/assets/...`.
+
+- `public/index.html` — main UI
+- `public/assets/js/app.js` — Vue app logic + API calls
+- `public/assets/css/style.css` — styling + responsive behavior
 - `api/index.py` — Flask API for Vercel
 - `vercel.json` — Vercel rewrites for `/api/*`
+
+## Transaction notifications
+
+For password-reset and transaction emails, run the additional [email migration](database/migrations/20261025_email_delivery.sql) and follow [email setup](docs/email-setup.md).
+
+Run [the notification migration](database/migrations/20261025_notifications.sql) after all payment/counter migrations, then restart Flask and refresh the browser. Staff and guests get a private notification inbox for new requests and transaction updates. See [notification setup and behavior](docs/notifications.md).
 
 ## Troubleshooting
 

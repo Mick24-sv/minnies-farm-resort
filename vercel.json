@@ -1,5 +1,6 @@
 {
   "version": 2,
+  "outputDirectory": "public",
   "rewrites": [
     {
       "source": "/api",
@@ -12,6 +13,7 @@
   ],
   "functions": {
     "api/index.py": {
+      "includeFiles": "public/**",
       "maxDuration": 30
     }
   }

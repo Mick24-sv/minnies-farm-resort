@@ -27,3 +27,16 @@ uploads/
 .DS_Store
 Thumbs.db
 .vscode/
+
+# Private keys, downloaded service-account credentials, and local diagnostics
+*.pem
+*.key
+*.p12
+*.pfx
+*service-account*.json
+credentials.json
+client_secret*.json
+*.log
+*.env.bak
+.codex/
+.agents/

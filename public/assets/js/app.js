@@ -1,4 +1,4 @@
-const { createApp, ref, computed, onMounted, watch } = Vue;
+const { createApp, ref, computed, onMounted, watch, nextTick } = Vue;
 
 const API_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
   ? 'http://127.0.0.1:5000/api'
@@ -19,10 +19,129 @@ const __app = createApp({
     const token = ref(savedToken);
     const currentUser = ref(null);
 
+    const notifications = ref([]), notificationUnread = ref(0), notificationsOpen = ref(false);
+    const notificationsBusy = ref(false), notificationsError = ref(''), notificationsOlder = ref(false);
+    let notificationPoll = null, notificationRequest = 0;
+    async function fetchNotifications(older = false) {
+      if (!currentUser.value || !token.value || notificationsBusy.value) return;
+      const sequence = ++notificationRequest, session = token.value;
+      notificationsBusy.value = true; notificationsError.value = '';
+      try {
+        const before = older ? notifications.value.at(-1)?.id : null;
+        const response = await fetch(`${API_URL}/notifications${before ? '?before=' + before : ''}`, {
+          headers: { Authorization: `Bearer ${session}` }, cache: 'no-store',
+        });
+        const data = await response.json();
+        if (sequence !== notificationRequest || session !== token.value) return;
+        if (!response.ok) throw new Error('Updates are unavailable. Please try again.');
+        const items = data.notifications || [];
+        const changed = !older && items[0]?.id !== notifications.value[0]?.id;
+        const previous = notifications.value;
+        notifications.value = older ? [...previous, ...items.filter(item => !previous.some(existing => existing.id === item.id))]
+          : previous.length > 50 ? [...items, ...previous.filter(item => item.id < items.at(-1)?.id)] : items;
+        notificationUnread.value = Number(data.unread_count || 0);
+        if (older || previous.length <= 50) notificationsOlder.value = items.length === 50;
+        if (changed && page.value === 'dashboard' && !showPaymentDialog.value) {
+          if (currentUser.value.role === 'staff') fetchAllBookings(); else fetchUserBookings();
+          fetchServiceAvails();
+        }
+      } catch (error) {
+        if (sequence === notificationRequest && session === token.value) notificationsError.value = error.message;
+      } finally { if (sequence === notificationRequest) notificationsBusy.value = false; }
+    }
+    async function toggleNotifications() {
+      notificationsOpen.value = !notificationsOpen.value;
+      if (notificationsOpen.value) {
+        await nextTick(); document.getElementById('notification-heading')?.focus();
+        await fetchNotifications();
+      }
+    }
+    function closeNotifications() {
+      notificationsOpen.value = false;
+      const mobile = window.matchMedia?.('(max-width: 1100px)')?.matches;
+      document.getElementById(mobile ? 'notification-bell-mobile' : 'notification-bell')?.focus();
+    }
+    async function markNotificationsRead(item = null) {
+      const session = token.value;
+      try {
+        const response = await fetch(`${API_URL}/notifications/read`, { method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session}` },
+          body: JSON.stringify(item ? { id: item.id } : {}),
+        });
+        if (session !== token.value) return;
+        if (!response.ok) throw new Error('Could not mark notifications as read. Please retry.');
+        const now = new Date().toISOString();
+        if (item) {
+          if (!item.read_at) { item.read_at = now; notificationUnread.value = Math.max(0, notificationUnread.value - 1); }
+        } else { notifications.value.forEach(entry => { entry.read_at = entry.read_at || now; }); notificationUnread.value = 0; }
+      } catch (error) { if (session === token.value) notificationsError.value = error.message; }
+    }
+    async function openNotification(item) {
+      if (paymentBusy.value) return;
+      const opened = await openPaymentDialog({ id: item.entity_id }, item.entity_kind);
+      if (opened) {
+        notificationsOpen.value = false;
+        navigate('dashboard');
+        await markNotificationsRead(item);
+      }
+    }
+    function notificationDate(value) {
+      return new Date(value).toLocaleString('en-PH', { timeZone: 'Asia/Manila', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    }
+    watch(() => currentUser.value?.id, () => {
+      ++notificationRequest;
+      if (notificationPoll) clearInterval(notificationPoll);
+      notificationPoll = null;
+      notifications.value = []; notificationUnread.value = 0; notificationsOpen.value = false;
+      notificationsBusy.value = false; notificationsError.value = ''; notificationsOlder.value = false;
+      if (currentUser.value) {
+        fetchNotifications();
+        notificationPoll = setInterval(() => {
+          if (!document.hidden) fetchNotifications();
+        }, 30000);
+      }
+    });
+
     const authMsg = ref('');
     const authMsgType = ref('');
     const authMsgKey = ref(0);
     const showRoomModal = ref(false);
+    const showCancelBookingModal = ref(false);
+    const pendingCancelBooking = ref(null);
+    const bookingCancellationBusy = ref(false);
+    const bookingCancellationError = ref('');
+    const roomImageUploads = ref(0);
+    const roomEditorBusy = computed(() => loading.value || roomImageUploads.value > 0);
+    let roomDialogTrigger = null;
+    let roomDialogBodyOverflow = '';
+    watch(showRoomModal, async isOpen => {
+      if (isOpen) {
+        roomDialogTrigger = document.activeElement;
+        roomDialogBodyOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+        await nextTick();
+        document.getElementById('editor-room-number')?.focus();
+      } else {
+        document.body.style.overflow = roomDialogBodyOverflow;
+        await nextTick();
+        if (roomDialogTrigger?.isConnected) roomDialogTrigger.focus();
+      }
+    });
+    function closeRoomDialog() { if (!roomEditorBusy.value) showRoomModal.value = false; }
+    function handleRoomDialogKeydown(event) {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        closeRoomDialog();
+      } else if (event.key === 'Tab') {
+        const controls = [...event.currentTarget.querySelectorAll('button:not(:disabled), input:not(:disabled):not([tabindex="-1"]), select:not(:disabled), textarea:not(:disabled)')]
+          .filter(control => control.getClientRects().length);
+        if (!controls.length) { event.preventDefault(); return; }
+        const first = controls[0], last = controls[controls.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+      }
+    }
     const editingRoom = ref(null);
     const loading = ref(false);
     const serviceAvails = ref([]);
@@ -36,14 +155,97 @@ const __app = createApp({
     const editingService = ref(null);
     const showDeleteServiceModal = ref(false);
     const pendingDeleteService = ref(null);
-    const serviceForm = ref({ name: '', category: 'day_service', price: 0, stock_quantity: -1, description: '', is_active: true });
+    const serviceForm = ref({ name: '', category: 'day_service', price: 0, stock_quantity: -1, description: '', is_active: true, image_url: '' });
+    const serviceImageReading = ref(false);
+    const serviceImageError = ref('');
+    const serviceEditorBusy = computed(() => loading.value || serviceImageReading.value);
+    let serviceDialogTrigger = null;
+    let serviceDialogBodyOverflow = '';
+    watch(showServiceAdminModal, async isOpen => {
+      if (isOpen) {
+        serviceDialogTrigger = document.activeElement;
+        serviceDialogBodyOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+        await nextTick();
+        document.getElementById('service-editor-name')?.focus();
+      } else {
+        document.body.style.overflow = serviceDialogBodyOverflow;
+        await nextTick();
+        if (serviceDialogTrigger?.isConnected) serviceDialogTrigger.focus();
+      }
+    });
+    function closeServiceDialog() { if (!serviceEditorBusy.value) showServiceAdminModal.value = false; }
+    function handleServiceDialogKeydown(event) {
+      if (event.key === 'Escape') {
+        event.preventDefault(); event.stopPropagation(); closeServiceDialog();
+      } else if (event.key === 'Tab') handleRoomDialogKeydown(event);
+    }
+    function chooseServicePhoto() { document.getElementById('service-photo-input')?.click(); }
+    function removeServicePhoto() {
+      serviceForm.value.image_url = '';
+      serviceImageError.value = '';
+      const input = document.getElementById('service-photo-input');
+      if (input) input.value = '';
+    }
+    function handleServicePhoto(event) {
+      if (serviceEditorBusy.value) return;
+      const file = event.target.files?.[0];
+      if (!file) return;
+      serviceImageError.value = '';
+      if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 2 * 1024 * 1024) {
+        serviceImageError.value = 'Choose a JPG, PNG or WebP image smaller than 2 MB.';
+        event.target.value = ''; return;
+      }
+      serviceImageReading.value = true;
+      const reader = new FileReader();
+      reader.onload = () => { serviceForm.value.image_url = reader.result; serviceImageReading.value = false; };
+      reader.onerror = () => { serviceImageError.value = 'Could not read this photo. Please try again.'; serviceImageReading.value = false; event.target.value = ''; };
+      reader.readAsDataURL(file);
+    }
     const staffTab = ref('bookings');
+    const staffBookingSearch = ref('');
+    const staffBookingStatus = ref('');
+    const staffRefreshing = ref(false);
+    const guestRefreshing = ref(false);
+    async function refreshGuestDashboard() {
+      if (guestRefreshing.value) return;
+      guestRefreshing.value = true;
+      try {
+        await fetchRooms();
+        await Promise.all([fetchUserBookings(), fetchServiceAvails()]);
+      } finally {
+        guestRefreshing.value = false;
+      }
+    }
+    function formatGuestDate(value) {
+      if (!value) return '—';
+      const date = new Date(String(value).slice(0, 10) + 'T12:00:00');
+      return Number.isNaN(date.getTime()) ? '—' : date.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
+    }
+    const filteredStaffBookings = computed(() => {
+      const query = staffBookingSearch.value.trim().toLowerCase();
+      return allBookings.value.filter(b =>
+        (!staffBookingStatus.value || b.status === staffBookingStatus.value) &&
+        (!query || [b.guestName, b.room, b.id].some(value => String(value ?? '').toLowerCase().includes(query)))
+      );
+    });
+
+    async function refreshStaffDashboard() {
+      if (staffRefreshing.value) return;
+      staffRefreshing.value = true;
+      try {
+        await fetchRooms();
+        await Promise.all([fetchAllBookings(), fetchServices(), fetchServiceAvails()]);
+      } finally {
+        staffRefreshing.value = false;
+      }
+    }
     const toasts = ref([]);
 
     // Mobile menu state
     const mobileMenuOpen = ref(false);
 
-    const today = new Date().toISOString().split('T')[0];
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 
     const loginForm = ref({ email: '', password: '' });
     const regForm = ref({ name: '', email: '', password: '', confirm: '', role: 'guest' });
@@ -52,8 +254,35 @@ const __app = createApp({
     const showRegConfirmPw = ref(false);
 
     const rooms = ref([]);
+    const roomsLoading = ref(false);
+    const roomLoadError = ref(false);
     const filters = ref({ checkIn: '', checkOut: '', type: '', maxPrice: '', capacity: '' });
     const selectedRoom = ref(null);
+    const activeRoomPhoto = ref(0);
+    const roomPhotos = computed(() => {
+      const room = selectedRoom.value;
+      if (!room) return [];
+      return [...new Set([room.image_url, room.image_url_2, room.image_url_3, room.image_url_4, room.image_url_5]
+        .filter(photo => typeof photo === 'string' && photo.trim()).map(photo => photo.trim()))];
+    });
+    function changeRoomPhoto(direction) {
+      if (!roomPhotos.value.length) return;
+      activeRoomPhoto.value = (activeRoomPhoto.value + direction + roomPhotos.value.length) % roomPhotos.value.length;
+    }
+    let roomPhotoGesture = null;
+    function startRoomPhotoGesture(event) {
+      if (roomPhotos.value.length < 2 || !event.isPrimary || event.button !== 0 || event.target.closest('button')) return;
+      roomPhotoGesture = { id: event.pointerId, x: event.clientX, y: event.clientY };
+      event.currentTarget.setPointerCapture(event.pointerId);
+    }
+    function endRoomPhotoGesture(event) {
+      if (!roomPhotoGesture || event.pointerId !== roomPhotoGesture.id) return;
+      const dx = event.clientX - roomPhotoGesture.x;
+      const dy = event.clientY - roomPhotoGesture.y;
+      roomPhotoGesture = null;
+      if (Math.abs(dx) >= 50 && Math.abs(dx) > Math.abs(dy) * 1.3) changeRoomPhoto(dx < 0 ? 1 : -1);
+    }
+    function cancelRoomPhotoGesture() { roomPhotoGesture = null; }
     const bookingForm = ref({ checkIn: '', checkOut: '', guests: 1 });
     const roomForm = ref({
       room_number: '', name: '', type: 'Standard', capacity: 2, price_per_night: '',
@@ -61,8 +290,218 @@ const __app = createApp({
       image_url_4: '', image_url_5: '', room_status: 'available'
     });
     const lastBooking = ref({});
+    const paymentOptions = ref({ configured: false, accounts: [], deposit_percent: 50, hold_hours: 3 });
+    const paymentOptionsLoading = ref(false);
+    const paymentOptionsError = ref(false);
+    const paymentBooking = ref(null);
+    const paymentKind = ref('booking');
+    const lastCounterService = ref(null);
+    const editingServicePaymentMethod = ref(false);
+    const savedServiceCounterChoice = computed(() => paymentKind.value === 'service' && currentUser.value?.role !== 'staff' && paymentBooking.value?.requested_payment_method === 'cash' && paymentBooking.value?.status === 'pending' && paymentBooking.value?.payment_status === 'unpaid');
+    const customerPaymentFormVisible = computed(() => currentUser.value?.role !== 'staff' && paymentBooking.value?.status === 'pending' && paymentBooking.value?.payment_review_status !== 'pending_review' && (!savedServiceCounterChoice.value || editingServicePaymentMethod.value));
+    const walkInKind = ref('booking');
+    const paymentHistory = ref([]);
+    const showPaymentDialog = ref(false);
+    const showWalkInDialog = ref(false);
+    const paymentBusy = ref(false);
+    const paymentError = ref('');
+    const paymentPhotoReading = ref(false);
+    const paymentForm = ref({ method: 'gcash', reference: '', proof: '', amount: '', verified: false, note: '' });
+    const walkInForm = ref({ room_id: '', guest_name: '', guest_phone: '', check_in_date: '', check_out_date: '', num_guests: 1, payment_method: 'cash', payment_reference: '', payment_received: false });
+    const walkInRoom = computed(() => (walkInKind.value === 'service' ? services.value : rooms.value).find(room => String(room.id) === String(walkInForm.value.room_id)));
+    const walkInTotal = computed(() => {
+      if (walkInKind.value === 'service') return walkInRoom.value ? Math.round(Number(walkInRoom.value.price) * Number(walkInForm.value.num_guests) * 100) / 100 : 0;
+      const nights = (new Date(walkInForm.value.check_out_date) - new Date(walkInForm.value.check_in_date)) / 86400000;
+      return nights > 0 && walkInRoom.value ? Math.round(Number(walkInRoom.value.price_per_night) * nights * 110) / 100 : 0;
+    });
+    function bookingMoney(value) { return Number(value || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+    function paymentStatusLabel(booking) { return ({ paid: 'Paid', partially_paid: 'Deposit paid', unpaid: 'Unpaid' })[booking.payment_status] || 'Unpaid'; }
+    function paymentProviderLogo(account) {
+      if (account.method === 'gcash') return 'assets/images/gcash-logo.svg';
+      if (account.method === 'bank_transfer' && /maribank/i.test(String(account.label || '').replace(/\s+/g, ''))) return 'assets/images/maribank-logo.png';
+      return '';
+    }
+    function paymentDeadline(value) {
+      return value ? new Date(value).toLocaleString('en-PH', { timeZone: 'Asia/Manila', dateStyle: 'medium', timeStyle: 'short' }) + ' (Philippine time)' : '';
+    }
+    function bookingReceipt(booking) {
+      return { ...booking, ref: booking.reference_code || 'MFR-' + booking.id, room: booking.room_name || booking.room || rooms.value.find(room => String(room.id) === String(booking.room_id))?.name || (String(selectedRoom.value?.id) === String(booking.room_id) ? selectedRoom.value.name : 'Room ' + booking.room_id),
+        checkIn: booking.check_in || booking.checkIn, checkOut: booking.check_out || booking.checkOut, guests: booking.guest_count || booking.guests, total: booking.total_price ?? booking.total };
+    }
+    function serviceReceipt(record, fallbackName = '') {
+      const knownName = services.value.find(service => String(service.id) === String(record.service_id))?.name;
+      return { ...record, ref: record.reference_code || 'MFS-' + record.id, room: record.service_name && record.service_name !== 'Service' ? record.service_name : knownName || fallbackName || 'Service', total: record.total_price };
+    }
+    function changeServicePaymentMethod() {
+      editingServicePaymentMethod.value = true;
+      paymentForm.value.method = paymentOptions.value.accounts[0]?.method || 'cash';
+    }
+    async function viewServiceRequests() {
+      navigate('dashboard');
+      await nextTick();
+      document.getElementById('guest-services-heading')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    async function fetchPaymentOptions() {
+      if (paymentOptionsLoading.value) return;
+      paymentOptionsLoading.value = true;
+      paymentOptionsError.value = false;
+      try {
+        const res = await fetch(`${API_URL}/payment-options`, { cache: 'no-store' });
+        if (!res.ok) throw new Error('Payment settings unavailable');
+        paymentOptions.value = await res.json();
+      } catch { paymentOptionsError.value = true; }
+      finally { paymentOptionsLoading.value = false; }
+    }
+    async function paymentApi(path, payload) {
+      const res = await fetch(`${API_URL}${path}`, { method: payload ? 'POST' : 'GET', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token.value}` }, ...(payload ? { body: JSON.stringify(payload) } : {}) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not complete this request.');
+      if (payload) fetchNotifications();
+      return data;
+    }
+    const paymentRequestKeys = new Map();
+    function requestKey(kind, details) {
+      const signature = kind + JSON.stringify(details);
+      if (!paymentRequestKeys.has(signature)) paymentRequestKeys.set(signature, globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`);
+      return paymentRequestKeys.get(signature);
+    }
+    function closePaymentDialogs() {
+      if (paymentBusy.value || paymentPhotoReading.value) return;
+      showPaymentDialog.value = false; showWalkInDialog.value = false; paymentError.value = '';
+    }
+    function paymentDialogKeydown(event) {
+      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); closePaymentDialogs(); }
+      else if (event.key === 'Tab') handleRoomDialogKeydown(event);
+    }
+    let paymentDialogTrigger = null, paymentBodyOverflow = '';
+    watch([showPaymentDialog, showWalkInDialog], async flags => {
+      if (flags.some(Boolean)) {
+        paymentDialogTrigger = document.activeElement; paymentBodyOverflow = document.body.style.overflow; document.body.style.overflow = 'hidden';
+        await nextTick(); document.querySelector('.payment-dialog [data-payment-focus]')?.focus();
+      } else {
+        document.body.style.overflow = paymentBodyOverflow; await nextTick(); if (paymentDialogTrigger?.isConnected) paymentDialogTrigger.focus();
+      }
+    });
+    async function openPaymentDialog(booking, kind = 'booking') {
+      if (paymentBusy.value) return;
+      const session = token.value;
+      paymentBusy.value = true; paymentError.value = '';
+      try {
+        paymentKind.value = kind;
+        editingServicePaymentMethod.value = false;
+        const data = await paymentApi(`${kind === 'service' ? '/services/avails' : '/bookings'}/${booking.id}`);
+        if (session !== token.value || !currentUser.value) return false;
+        const record = kind === 'service' ? data.avail : data.booking;
+        paymentBooking.value = kind === 'service' ? serviceReceipt(record) : bookingReceipt({ ...record, room: booking.room }); paymentHistory.value = data.payments || [];
+        if (kind === 'booking' && lastBooking.value.id === record.id) lastBooking.value = { ...paymentBooking.value };
+        paymentForm.value = { method: record.requested_payment_method || record.submitted_payment_method || (currentUser.value?.role === 'staff' ? 'cash' : paymentOptions.value.accounts[0]?.method || (kind === 'service' ? 'cash' : 'gcash')), reference: record.payment_review_status === 'pending_review' ? record.submitted_payment_reference || '' : '',
+          proof: '', amount: record.deposit_due > 0 ? record.deposit_due : record.balance_due, verified: false, note: '' };
+        showPaymentDialog.value = true;
+        return true;
+      } catch (error) { if (session === token.value) showToast(error.message, 'error'); return false; } finally { paymentBusy.value = false; }
+    }
+    function readPaymentProof(event) {
+      const file = event.target.files?.[0]; if (!file) return;
+      if (!['image/jpeg','image/png','image/webp'].includes(file.type) || file.size > 2*1024*1024) { paymentError.value = 'Use a JPG, PNG or WebP screenshot up to 2 MB.'; event.target.value = ''; return; }
+      paymentPhotoReading.value = true; paymentError.value = '';
+      const reader = new FileReader();
+      reader.onload = () => { paymentForm.value.proof = reader.result; paymentPhotoReading.value = false; };
+      reader.onerror = () => { paymentError.value = 'Could not read this screenshot.'; paymentPhotoReading.value = false; };
+      reader.readAsDataURL(file);
+    }
+    async function saveBookingPayment(reject = false) {
+      if (paymentBusy.value || paymentPhotoReading.value || !paymentBooking.value) return;
+      paymentBusy.value = true; paymentError.value = '';
+      const staff = currentUser.value?.role === 'staff';
+      const booking = paymentBooking.value;
+      try {
+        let path, body;
+        if (reject) { path = 'payment-rejection'; body = { note: paymentForm.value.note }; }
+        else if (staff) {
+          path = 'payments'; body = { amount: paymentForm.value.amount, method: paymentForm.value.method, reference: paymentForm.value.reference, verified: paymentForm.value.verified };
+          body.request_key = requestKey(paymentKind.value + '-payment', { id: booking.id, paid: booking.amount_paid, ...body });
+        } else if (paymentKind.value === 'service' && paymentForm.value.method === 'cash') {
+          path = 'pay-at-counter'; body = {};
+        } else { path = 'payment-submission'; body = { method: paymentForm.value.method, reference: paymentForm.value.reference, proof: paymentForm.value.proof }; }
+        const data = await paymentApi(`${paymentKind.value === 'service' ? '/services/avails' : '/bookings'}/${booking.id}/${path}`, body);
+        if (paymentKind.value === 'service') {
+          paymentBooking.value = serviceReceipt(data.avail, booking.room); await fetchServiceAvails(); await fetchServices();
+        } else {
+          paymentBooking.value = bookingReceipt(data.booking);
+          if (lastBooking.value.id === data.booking.id) lastBooking.value = bookingReceipt(data.booking);
+          if (staff) await fetchAllBookings(); else await fetchUserBookings();
+        }
+        const counterChoice = !staff && paymentKind.value === 'service' && path === 'pay-at-counter';
+        showPaymentDialog.value = false;
+        if (counterChoice) {
+          lastCounterService.value = { ...paymentBooking.value };
+          editingServicePaymentMethod.value = false;
+          navigate('service-confirm');
+          await nextTick();
+          window.scrollTo?.({ top: 0, behavior: 'auto' });
+          document.getElementById('service-counter-confirm-heading')?.focus();
+        }
+        showToast(counterChoice ? 'Pay at the counter selected. Show your request reference when you arrive.' : reject ? 'Payment submission rejected.' : staff ? 'Payment recorded.' : 'Submitted for verification. Payment is not confirmed until staff verify it.', 'success', 5000);
+      } catch (error) { paymentError.value = error.message; } finally { paymentBusy.value = false; }
+    }
+    async function openWalkInDialog(kind = 'booking') {
+      walkInKind.value = kind;
+      paymentError.value = ''; if (kind === 'service') await fetchServices(); else await fetchRooms();
+      walkInForm.value = { room_id: '', guest_name: '', guest_phone: '', check_in_date: today, check_out_date: '', num_guests: 1, payment_method: 'cash', payment_reference: '', payment_received: false };
+      showWalkInDialog.value = true;
+    }
+    async function saveWalkIn() {
+      if (paymentBusy.value) return;
+      paymentBusy.value = true; paymentError.value = '';
+      const body = { ...walkInForm.value, ...(walkInKind.value === 'service' ? { service_id: walkInForm.value.room_id, quantity: walkInForm.value.num_guests } : { booking_source: 'walk_in' }), expected_total: walkInTotal.value };
+      body.request_key = requestKey(walkInKind.value + '-walk-in', body);
+      try {
+        const data = await paymentApi(walkInKind.value === 'service' ? '/services/avails/walk-in' : '/bookings', body);
+        if (walkInKind.value === 'service') {
+          showWalkInDialog.value = false; staffTab.value = 'services';
+          await fetchServiceAvails(); await fetchServices();
+          paymentRequestKeys.clear(); paymentBusy.value = false;
+          await openPaymentDialog(data.avail, 'service');
+          return;
+        }
+        lastBooking.value = bookingReceipt({ ...data.booking, room: walkInRoom.value?.name });
+        paymentRequestKeys.clear(); bookingReferenceCopied.value = false; showWalkInDialog.value = false;
+        staffTab.value = 'bookings'; navigate('confirm');
+      } catch (error) { paymentError.value = error.message; } finally { paymentBusy.value = false; }
+    }
+    const bookingReferenceCopied = ref(false);
+    async function copyBookingReference() {
+      if (!lastBooking.value.ref) return;
+      try {
+        await navigator.clipboard.writeText(String(lastBooking.value.ref));
+        bookingReferenceCopied.value = true;
+      } catch {
+        showToast('Please select and copy the booking reference.', 'info');
+      }
+    }
     const allBookings = ref([]);
     const services = ref([]);
+    const staffPages = ref({ bookings: 1, services: 1, requests: 1, rooms: 1 });
+    const staffPageSize = 10;
+    const staffPagination = computed(() => {
+      const sources = { bookings: filteredStaffBookings.value, services: services.value, requests: serviceAvails.value, rooms: rooms.value };
+      return Object.fromEntries(Object.entries(sources).map(([key, records]) => {
+        const total = records.length;
+        const pages = Math.max(1, Math.ceil(total / staffPageSize));
+        const page = Math.max(1, Math.min(staffPages.value[key], pages));
+        const offset = (page - 1) * staffPageSize;
+        return [key, { page, pages, total, start: total ? offset + 1 : 0, end: Math.min(offset + staffPageSize, total), rows: records.slice(offset, offset + staffPageSize) }];
+      }));
+    });
+    function changeStaffPage(key, direction) {
+      const pager = staffPagination.value[key];
+      if (!pager) return;
+      staffPages.value[key] = Math.max(1, Math.min(pager.page + direction, pager.pages));
+    }
+    watch([staffBookingSearch, staffBookingStatus], () => { staffPages.value.bookings = 1; });
+    watch(() => [filteredStaffBookings.value.length, services.value.length, serviceAvails.value.length, rooms.value.length], () => {
+      for (const key of Object.keys(staffPages.value)) staffPages.value[key] = staffPagination.value[key].page;
+    });
     const showServiceModal = ref(false);
     const showForgotPassword = ref(false);
     const forgotEmail = ref('');
@@ -111,6 +550,7 @@ const __app = createApp({
 
       // Initial data bootstrap
       try {
+        await fetchPaymentOptions();
         await fetchServices();
         if (token.value) {
           await fetchCurrentUser();
@@ -212,16 +652,14 @@ const __app = createApp({
     const bookingTotal = computed(() => {
       if (!selectedRoom.value || bookingNights.value <= 0) return 0;
       const sub = selectedRoom.value.price_per_night * bookingNights.value;
-      return Math.round(sub + sub * 0.1);
+      return Math.round((sub + sub * 0.1) * 100) / 100;
     });
 
     const upcomingBookings = computed(() => {
-      const today = new Date().toISOString().split('T')[0];
-      return allBookings.value.filter(b => (b.check_in || b.check_in_date) >= today && b.status !== 'cancelled');
+      return allBookings.value.filter(b => (b.check_in || b.check_in_date) >= today && b.status !== 'cancelled' && b.status !== 'completed');
     });
 
     const pastBookings = computed(() => {
-      const today = new Date().toISOString().split('T')[0];
       return allBookings.value.filter(b => (b.check_in || b.check_in_date) < today || b.status === 'cancelled' || b.status === 'completed');
     });
 
@@ -250,15 +688,15 @@ const __app = createApp({
     }
 
     const features = [
-      { icon: '🌾', title: 'Nature Escape', desc: 'Immerse yourself in the peaceful sounds of nature and enjoy the fresh air of our beautiful fields.' },
-      { icon: '🏡', title: 'Cozy Rooms', desc: 'Farm-inspired rooms with wooden accents, cozy bedding, and garden views.' },
-      { icon: '🏐', title: 'Volleyball Games', desc: 'Get active and enjoy some friendly competition on our nature-surrounded volleyball court.' },
-      { icon: '📅', title: 'Easy Booking', desc: 'Real-time availability checks and instant confirmation for a hassle-free experience.' },
+      { title: 'Out in nature', desc: 'Open fields, fresh air, and the quieter pace of a day outdoors.' },
+      { title: 'A comfortable room', desc: 'Farm-inspired rooms with wooden accents, comfortable bedding, and garden views.' },
+      { title: 'A game together', desc: 'Bring your friends together for a game on our outdoor volleyball court.' },
+      { title: 'Plan your stay', desc: 'Browse rooms, check availability, and send your booking request online.' },
     ];
 
     const teamMembers = [
       { name: 'Maximana Morales', initials: 'MM', role: 'Founder & Owner', photo: 'https://i.imgur.com/WOf3fU3.jpg', desc: 'The heart of the resort. Maximana turned her family farm into a beloved getaway with warmth and determination.', color: 'linear-gradient(135deg,#4a7c3f,#2d4a1e)' },
-      { name: 'Mick Daniel Morales', initials: 'MD', role: 'Fullstack Developer', photo: 'https://i.imgur.com/izbkYqi.jpg', desc: "Designed and built the resort's booking interface with Vue.js for a smooth guest experience.", color: 'linear-gradient(135deg,#2d6a5f,#1a2e2a)' },
+      { name: 'Mick Daniel Morales', initials: 'MD', role: 'Fullstack Developer', photo: 'https://i.imgur.com/izbkYqi.jpg', desc: "Built the resort's website and booking experience to help guests plan their stay.", color: 'linear-gradient(135deg,#2d6a5f,#1a2e2a)' },
     ];
 
     const faqs = ref([
@@ -333,9 +771,7 @@ const __app = createApp({
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                email: googleUser.email.toLowerCase(),
-                name: googleUser.name,
-                google_id: googleUser.sub
+                access_token: tokenResponse.access_token
               })
             });
             const data = await backendRes.json();
@@ -407,8 +843,9 @@ const __app = createApp({
         authMsg.value = 'Connection error: ' + err.message;
         authMsgType.value = 'error';
         authMsgKey.value++;
+      } finally {
+        loading.value = false;
       }
-      loading.value = false;
     }
 
     async function doRegister() {
@@ -462,8 +899,9 @@ const __app = createApp({
         authMsg.value = 'Connection error: ' + err.message; 
         authMsgType.value = 'error'; 
         authMsgKey.value++;
+      } finally {
+        loading.value = false;
       }
-      loading.value = false;
     }
 
     async function logout() {
@@ -487,6 +925,8 @@ const __app = createApp({
 
     // ── ROOMS ──────────────────────────────────────────────────────────────────
     async function fetchRooms() {
+      roomsLoading.value = true;
+      roomLoadError.value = false;
       try {
         // Clear existing data first to force UI update
         rooms.value = [];
@@ -495,9 +935,11 @@ const __app = createApp({
         // Build URL with cache-busting timestamp
         const params = new URLSearchParams();
         params.append('_t', Date.now()); // Cache buster
-        if (filters.value.type) params.append('type', filters.value.type);
-        if (filters.value.maxPrice) params.append('max_price', filters.value.maxPrice);
-        if (filters.value.capacity) params.append('capacity', filters.value.capacity);
+        if (currentUser.value?.role !== 'staff') {
+          if (filters.value.type) params.append('type', filters.value.type);
+          if (filters.value.maxPrice) params.append('max_price', filters.value.maxPrice);
+          if (filters.value.capacity) params.append('capacity', filters.value.capacity);
+        }
         const url = `${API_URL}/rooms?${params.toString()}`;
         const res = await fetch(url, {
           headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
@@ -511,8 +953,14 @@ const __app = createApp({
               r.emoji = emojis[r.type] || '🏠';
             }
           });
+        } else {
+          throw new Error('Could not load rooms');
         }
-      } catch (err) {}
+      } catch (err) {
+        roomLoadError.value = true;
+      } finally {
+        roomsLoading.value = false;
+      }
     }
 
     // ── BOOKINGS ─────────────────────────────────────────
@@ -525,6 +973,7 @@ const __app = createApp({
     }
 
     async function doBook() {
+      if (loading.value) return;
       if (!currentUser.value || !token.value) {
         clearSessionAndGoToAuth('Please log in to continue booking. 🔐');
         return;
@@ -546,7 +995,7 @@ const __app = createApp({
             check_out_date: bookingForm.value.checkOut, 
             num_guests: bookingForm.value.guests,
             total_price: bookingTotal.value,
-            user_id: currentUser.value.id
+            request_key: requestKey('online-booking', { room: selectedRoom.value.id, ...bookingForm.value })
           })
         });
 
@@ -556,8 +1005,10 @@ const __app = createApp({
           return;
         }
 
-        showToast('Booking successful! 🎉', 'success');
+        showToast('Reservation created. Submit your deposit within 3 hours.', 'success');
+        bookingReferenceCopied.value = false;
         lastBooking.value = {
+          ...data.booking,
           ref: data.booking.reference_code,
           room: selectedRoom.value.name,
           checkIn: data.booking.check_in || data.booking.check_in_date,
@@ -565,6 +1016,7 @@ const __app = createApp({
           guests: data.booking.guest_count || data.booking.num_guests,
           total: data.booking.total_price
         };
+        paymentRequestKeys.clear();
         await fetchUserBookings();
         navigate('confirm');
       } catch (err) {
@@ -593,7 +1045,7 @@ const __app = createApp({
               ...b,
               guestName: currentUser.value.name,
               emoji: room?.emoji || '🏠',
-              room: room?.name || 'Room ' + b.room_id,
+              room: b.room_name || room?.name || 'Room ' + b.room_id,
               checkIn: b.check_in || b.check_in_date,
               checkOut: b.check_out || b.check_out_date,
               guest_count: b.guest_count || b.num_guests || 1, // Add this
@@ -622,7 +1074,7 @@ const __app = createApp({
             const room = rooms.value.find(r => r.id === b.room_id);
             return {
               ...b, 
-              guestName: b.guest_name || 'Guest ' + b.user_id, 
+              guestName: b.walk_in_guest_name || b.guest_name || 'Guest ' + b.user_id,
               room: b.room_name || room?.name || 'Room ' + b.room_id,
               checkIn: b.check_in || b.check_in_date, 
               checkOut: b.check_out || b.check_out_date,
@@ -636,14 +1088,30 @@ const __app = createApp({
       } catch (e) {}
     }
 
-    async function cancelBooking(b) {
-      if (!confirm('Cancel this booking?')) return;
-      loading.value = true;
+    function cancelBooking(b) {
+      pendingCancelBooking.value = b;
+      bookingCancellationError.value = '';
+      showCancelBookingModal.value = true;
+    }
+    async function confirmCancelBooking() {
+      if (!pendingCancelBooking.value || bookingCancellationBusy.value) return;
+      bookingCancellationBusy.value = true;
+      bookingCancellationError.value = '';
       try {
-        const res = await fetch(`${API_URL}/bookings/${b.id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token.value}` } });
-        if (res.ok) await fetchUserBookings();
-      } catch (err) {}
-      loading.value = false;
+        const res = await fetch(`${API_URL}/bookings/${pendingCancelBooking.value.id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token.value}` } });
+        if (!res.ok) {
+          bookingCancellationError.value = 'We could not cancel this reservation. Please try again.';
+          return;
+        }
+        await fetchUserBookings();
+        showCancelBookingModal.value = false;
+        pendingCancelBooking.value = null;
+        showToast('Your reservation has been cancelled.', 'success');
+      } catch {
+        bookingCancellationError.value = 'Could not connect. Please try again.';
+      } finally {
+        bookingCancellationBusy.value = false;
+      }
     }
 
     async function updateBookingStatus(b, status) {
@@ -664,21 +1132,24 @@ const __app = createApp({
         if (contentType.includes('application/json')) {
           try {
             const data = JSON.parse(bodyText || '{}');
-            alert(data.error || data.message || 'Error updating status');
+            showToast(data.error || data.message || 'Error updating status', 'error');
           } catch {
-            alert('Error updating status');
+            showToast('Error updating status', 'error');
           }
         } else {
-          alert(`Error updating status (HTTP ${res.status}). Please refresh and try again.`);
+          showToast('Could not update the booking. Please refresh and try again.', 'error');
         }
-      } catch (e) { alert('Error: ' + e.message); }
+      } catch (e) { showToast('Could not connect. Please try again.', 'error'); }
     }
 
     function resetFilters() { filters.value = { checkIn: '', checkOut: '', type: '', maxPrice: '', capacity: '' }; fetchRooms(); }
 
     // Updated viewRoom — now resets and fetches reviews before navigating
     function viewRoom(room) {
+      fetchPaymentOptions();
       selectedRoom.value = room;
+      activeRoomPhoto.value = 0;
+      cancelRoomPhotoGesture();
       bookingForm.value = { checkIn: filters.value.checkIn, checkOut: filters.value.checkOut, guests: 1 };
       // Reset reviews state for the new room
       reviews.value = [];
@@ -704,7 +1175,7 @@ const __app = createApp({
     }
 
     async function submitReview() {
-      if (!reviewForm.value.rating) { alert('Please select a star rating.'); return; }
+      if (!reviewForm.value.rating) { showToast('Please select a star rating.', 'error'); return; }
       if (!eligibleBooking.value) return;
       try {
         const res = await fetch(`${API_URL}/reviews`, {
@@ -718,11 +1189,11 @@ const __app = createApp({
           })
         });
         const data = await res.json();
-        if (!res.ok) { alert(data.error || 'Error submitting review'); return; }
+        if (!res.ok) { showToast(data.error || 'Error submitting review', 'error'); return; }
         reviewForm.value = { rating: 0, review: '' };
         reviewHover.value = 0;
         await fetchReviews(selectedRoom.value.id);
-      } catch (err) { alert('Connection error: ' + err.message); }
+      } catch (err) { showToast('Could not connect. Please try again.', 'error'); }
     }
 
     // ── ROOM MANAGEMENT (staff) ────────────────────────────
@@ -752,6 +1223,7 @@ const __app = createApp({
     }
 
     async function saveRoom() {
+      if (roomEditorBusy.value) return;
       if (!roomForm.value.room_number || !roomForm.value.name || !roomForm.value.price_per_night) { showToast('Please fill in Room Number, Room Name, and Price/Night', 'error'); return; }
       loading.value = true;
       try {
@@ -876,11 +1348,16 @@ const __app = createApp({
     async function handleFileUpload(event, index) {
       const file = event.target.files[0];
       if (!file) return;
+      if (roomEditorBusy.value) return;
+      roomImageUploads.value++;
 
       showToast(`Uploading image ${index}... 📤`, 'info');
 
       const reader = new FileReader();
-      reader.readAsDataURL(file);
+      reader.onerror = () => {
+        roomImageUploads.value--;
+        showToast('Could not read that image. Please try again.', 'error');
+      };
       reader.onload = async () => {
         const base64Data = reader.result;
         try {
@@ -903,8 +1380,11 @@ const __app = createApp({
           }
         } catch (err) {
           showToast('Upload error: ' + err.message, 'error');
+        } finally {
+          roomImageUploads.value--;
         }
       };
+      reader.readAsDataURL(file);
     }
 
     function deleteServiceAvail(id) {
@@ -923,7 +1403,8 @@ const __app = createApp({
           headers: { 'Authorization': `Bearer ${t}` }
         });
         if (res.ok) {
-          showToast('Request deleted', 'success');
+          showToast('Service request cancelled. Payment history retained.', 'success');
+          await fetchServices();
           await fetchServiceAvails();
         } else {
           const contentType = res.headers.get('content-type') || '';
@@ -1047,17 +1528,20 @@ const __app = createApp({
 
     function openAddService() {
       editingService.value = null;
-      serviceForm.value = { name: '', category: 'day_service', price: 0, stock_quantity: -1, description: '', is_active: true };
+      serviceForm.value = { name: '', category: 'day_service', price: 0, stock_quantity: -1, description: '', is_active: true, image_url: '' };
+      serviceImageError.value = '';
       showServiceAdminModal.value = true;
     }
 
     function editService(s) {
       editingService.value = s;
-      serviceForm.value = { ...s };
+      serviceForm.value = { ...s, image_url: s.image_url || '' };
+      serviceImageError.value = '';
       showServiceAdminModal.value = true;
     }
 
     async function saveService() {
+      if (serviceEditorBusy.value) return;
       if (!token.value && !localStorage.getItem('token')) { navigate('auth'); return; }
       if (!serviceForm.value.name) { showToast('Service name is required', 'error'); return; }
 
@@ -1081,7 +1565,8 @@ const __app = createApp({
             price: Number(serviceForm.value.price || 0),
             stock_quantity: Number(serviceForm.value.stock_quantity ?? -1),
             description: serviceForm.value.description,
-            is_active: !!serviceForm.value.is_active
+            is_active: !!serviceForm.value.is_active,
+            image_url: serviceForm.value.image_url || null
           })
         });
 
@@ -1125,7 +1610,7 @@ const __app = createApp({
         });
         if (res.ok) {
           await fetchServices();
-          showToast('Service deleted! 🗑️', 'success');
+          showToast('Service hidden. Payment history retained.', 'success');
         } else { 
           const contentType = res.headers.get('content-type') || '';
           const bodyText = await res.text();
@@ -1146,63 +1631,20 @@ const __app = createApp({
       loading.value = false;
     }
 
-    async function availService(name, price) {
+    async function availService(service) {
       if (!currentUser.value) { navigate('auth'); return; }
-
-      // Map service names to their database IDs (from Supabase screenshot)
-      const serviceIds = { 
-        'Day Entrance': 1, 
-        'Karaoke Room': 2, 
-        'Day Fun Bundle (Entrance + Karaoke)': 3,
-        'Day Fun Bundle': 3 // Fallback for shorter name
-      };
-      
-      // Flexible ID lookup (by name or by matching substring)
-      let serviceId = serviceIds[name];
-      if (!serviceId) {
-          if (name.toLowerCase().includes('entrance')) serviceId = 1;
-          else if (name.toLowerCase().includes('karaoke')) serviceId = 2;
-          else if (name.toLowerCase().includes('bundle')) serviceId = 3;
-      }
-
-      if (!serviceId) {
-        showToast('Service ID not found for ' + name, 'error');
-        return;
-      }
-
-      showToast(`Processing request for ${name}... ⏳`, 'info');
-
+      if (paymentBusy.value) return;
+      paymentBusy.value = true;
       try {
-        const res = await fetch(`${API_URL}/services/${serviceId}/avail`, {
-          method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json', 
-            'Authorization': `Bearer ${token.value}` 
-          },
-          body: JSON.stringify({ 
-            notes: `Request from ${currentUser.value.name}`,
-            quantity: 1
-          })
-        });
-        
-        const data = await res.json();
-        if (!res.ok) { 
-          showToast(data.error || 'Error submitting request', 'error'); 
-          return; 
-        }
-
-        serviceModalData.value = {
-          name, 
-          price,
-          guest: currentUser.value.name,
-          icon: name.includes('Karaoke') ? '🎤' : '🌿'
-        };
-        showServiceModal.value = true;
-        showToast('Service request submitted! 🎉', 'success');
-        fetchServiceAvails(); // Refresh dashboard list
-      } catch (err) { 
-        showToast('Connection error.', 'error');
-      }
+        const details = { quantity: 1 };
+        details.request_key = requestKey('service-request', { service_id: service.id, quantity: 1 });
+        const data = await paymentApi(`/services/${service.id}/avail`, details);
+        paymentRequestKeys.clear();
+        await fetchServiceAvails(); await fetchServices();
+        paymentBusy.value = false;
+        await openPaymentDialog(data.avail, 'service');
+      } catch (error) { showToast(error.message, 'error'); }
+      finally { paymentBusy.value = false; }
     }
 
     async function fetchServiceAvails() {
@@ -1238,6 +1680,37 @@ const __app = createApp({
     }
 
     // ── WATCH staffTab ──────────
+    const actionDialogBusy = computed(() => loading.value || bookingCancellationBusy.value);
+    let actionDialogTrigger = null;
+    let actionDialogBodyOverflow = '';
+    watch([showCancelBookingModal, showDeleteModal, showDeleteRoomModal, showDeleteBookingModal, showDeleteServiceModal], async flags => {
+      if (flags.some(Boolean)) {
+        actionDialogTrigger = document.activeElement;
+        actionDialogBodyOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+        await nextTick();
+        document.querySelector('.action-dialog [data-safe-action]')?.focus();
+      } else {
+        document.body.style.overflow = actionDialogBodyOverflow;
+        await nextTick();
+        if (actionDialogTrigger?.isConnected) actionDialogTrigger.focus();
+      }
+    });
+    function closeActionDialog() {
+      if (actionDialogBusy.value) return;
+      showCancelBookingModal.value = false;
+      showDeleteModal.value = false;
+      showDeleteRoomModal.value = false;
+      showDeleteBookingModal.value = false;
+      showDeleteServiceModal.value = false;
+      pendingCancelBooking.value = null;
+      bookingCancellationError.value = '';
+    }
+    function handleActionDialogKeydown(event) {
+      if (event.key === 'Escape') {
+        event.preventDefault(); event.stopPropagation(); closeActionDialog();
+      } else if (event.key === 'Tab') handleRoomDialogKeydown(event);
+    }
     watch(staffTab, (newTab) => {
       if (newTab === 'rooms') { rooms.value = []; fetchRooms(); }
       if (newTab === 'services') { services.value = []; fetchServices(); }
@@ -1245,6 +1718,8 @@ const __app = createApp({
 
     // ── RETURN (all refs/functions exposed to template) ────────────────────────
     return {
+      notifications, notificationUnread, notificationsOpen, notificationsBusy, notificationsError, notificationsOlder,
+      fetchNotifications, toggleNotifications, closeNotifications, markNotificationsRead, openNotification, notificationDate,
       page, authTab, dashTab, authMsg, authMsgType, authMsgKey, showRoomModal, editingRoom, loading, mobileMenuOpen,
       today, currentUser, token, loginForm, regForm, showLoginPw, showRegPw, showRegConfirmPw, rooms, filters, selectedRoom,
       bookingForm, roomForm, lastBooking, allBookings, features, teamMembers, faqs,
@@ -1274,7 +1749,26 @@ const __app = createApp({
       triggerUpload,
       removeImage,
       handleFileUpload,
-      staffTab,
+      staffTab, staffBookingSearch, staffBookingStatus, filteredStaffBookings, staffRefreshing, refreshStaffDashboard,
+      guestRefreshing, refreshGuestDashboard, formatGuestDate, roomsLoading, roomLoadError,
+      roomPhotos, activeRoomPhoto, changeRoomPhoto,
+      startRoomPhotoGesture, endRoomPhotoGesture, cancelRoomPhotoGesture,
+      closeRoomDialog, handleRoomDialogKeydown,
+      roomEditorBusy, roomImageUploads,
+      serviceEditorBusy, serviceImageReading, serviceImageError, closeServiceDialog, handleServiceDialogKeydown,
+      staffPagination, changeStaffPage,
+      bookingReferenceCopied, copyBookingReference,
+      showCancelBookingModal, pendingCancelBooking, bookingCancellationBusy, bookingCancellationError, confirmCancelBooking,
+      actionDialogBusy, closeActionDialog, handleActionDialogKeydown,
+      toasts,
+      paymentOptions, paymentBooking, paymentHistory, showPaymentDialog, showWalkInDialog, paymentBusy, paymentError, paymentPhotoReading, paymentForm,
+      walkInForm, walkInRoom, walkInTotal, bookingMoney, paymentStatusLabel, paymentDeadline, openPaymentDialog, readPaymentProof, saveBookingPayment,
+      openWalkInDialog, saveWalkIn, closePaymentDialogs, paymentDialogKeydown,
+      paymentOptionsLoading, paymentOptionsError, fetchPaymentOptions,
+      paymentKind, walkInKind,
+      lastCounterService, editingServicePaymentMethod, savedServiceCounterChoice, customerPaymentFormVisible, changeServicePaymentMethod, viewServiceRequests,
+      paymentProviderLogo,
+      chooseServicePhoto, removeServicePhoto, handleServicePhoto,
       showToast,
       // ── reviews ──
       reviews, reviewsAvg, reviewsTotal, reviewForm, reviewHover,

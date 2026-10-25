@@ -6,3 +6,17 @@ __pycache__/
 .git
 .vscode
 uploads/
+tests/
+database/
+docs/
+api/legacy/
+*.pem
+*.key
+*.p12
+*.pfx
+*service-account*.json
+credentials.json
+client_secret*.json
+*.log
+.codex/
+.agents/

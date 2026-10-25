@@ -8,6 +8,7 @@ from flask_jwt_extended import JWTManager, create_access_token, jwt_required, ge
 from passlib.hash import pbkdf2_sha256
 import secrets
 import time
+from urllib.parse import quote
 
 try:
     from dotenv import load_dotenv
@@ -41,8 +42,7 @@ class VercelPathMiddleware:
 app.wsgi_app = VercelPathMiddleware(app.wsgi_app)
 
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-if not os.path.exists(os.path.join(ROOT_DIR, 'index.html')):
-    ROOT_DIR = os.getcwd()
+PUBLIC_DIR = os.path.join(ROOT_DIR, 'public')
 
 DEBUG = os.getenv('DEBUG', '').strip() == '1'
 
@@ -51,14 +51,20 @@ def get_clean_env(key):
     # Remove all whitespace, newlines, and quotes that might have been pasted by accident
     return val.strip().replace("\n", "").replace("\r", "").replace(" ", "").replace("'", "").replace('"', "")
 
-_jwt_secret = get_clean_env("JWT_SECRET_KEY") or "default-insecure-secret-set-in-vercel"
+_jwt_secret = get_clean_env("JWT_SECRET_KEY")
+if not _jwt_secret:
+    raise RuntimeError('JWT_SECRET_KEY must be configured before starting the application.')
 app.config["JWT_SECRET_KEY"] = _jwt_secret
 jwt = JWTManager(app)
 
 SUPABASE_URL = get_clean_env('SUPABASE_URL')
 SUPABASE_KEY = get_clean_env('SUPABASE_KEY')
 
-RESET_TOKENS = {}
+
+
+def public_user(user):
+    """Only account fields intended for display can leave authentication routes."""
+    return {key: user[key] for key in ('id', 'name', 'email', 'role', 'is_verified') if key in user}
 
 
 # --- HELPERS ---
@@ -93,7 +99,7 @@ def supabase_req(endpoint, method='GET', data=None):
         session.mount('https://', adapter)
         
         if DEBUG:
-            print(f"Supabase API Call: {method} {url}")
+            print(f"Supabase API Call: {method} {endpoint.split('?')[0]}")
         
         if method == 'GET':
             res = session.get(url, headers=headers, timeout=15)
@@ -108,14 +114,13 @@ def supabase_req(endpoint, method='GET', data=None):
 
         if DEBUG:
             print(f"Supabase Status: {res.status_code}")
-            print(f"Supabase Response: {res.text[:500]}")
 
         res.raise_for_status()
         return res.json() if res.text else []
 
     except Exception as e:
         if DEBUG:
-            print(f"Supabase request error ({method} {endpoint}): {str(e)}")
+            print(f"Supabase request error: {method} {type(e).__name__}")
         # If DNS fails, try to log the IP for debugging
         try:
             host = url_base.split("//")[-1].split("/")[0]
@@ -190,7 +195,10 @@ def login():
         email = data.get('email', '').strip().lower()
         password = data.get('password')
 
-        users = supabase_req(f'users?email=eq.{email}&select=*')
+        if not email or not isinstance(password, str) or not password:
+            return jsonify({"error": "Invalid email or password."}), 401
+
+        users = supabase_req(f'users?email=eq.{quote(email, safe="")}&select=*')
         
         if not users:
             return jsonify({"error": "Invalid email or password."}), 401
@@ -209,7 +217,7 @@ def login():
             return jsonify({"error": "Invalid email or password."}), 401
 
         token = create_access_token(identity=str(user.get('id')))
-        return jsonify({"token": token, "user": user}), 200
+        return jsonify({"token": token, "user": public_user(user)}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -243,63 +251,31 @@ def register():
         user = created[0] if isinstance(created, list) and created else user_data
         user.pop('password', None)
 
-        return jsonify({"message": "Account created! You can now sign in.", "user": user}), 201
+        return jsonify({"message": "Account created! You can now sign in.", "user": public_user(user)}), 201
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 
-@app.route('/api/auth/forgot-password', methods=['POST'])
-def forgot_password():
-    try:
-        data = request.get_json() or {}
-        email = (data.get('email') or '').strip().lower()
-        if not email:
-            return jsonify({'error': 'Email is required.'}), 400
-
-        users = supabase_req(f'users?email=eq.{email}&select=id,name,email&limit=1')
-        if users:
-            token = secrets.token_urlsafe(32)
-            RESET_TOKENS[token] = {'user_id': users[0].get('id'), 'expires': time.time() + 3600}
-
-        # Always return 200 to avoid leaking whether email exists
-        return jsonify({'message': 'If that email exists, a reset link has been sent.'}), 200
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/api/auth/reset-password', methods=['POST'])
-def reset_password():
-    try:
-        data = request.get_json() or {}
-        token = data.get('token')
-        new_password = data.get('password')
-        if not token or not new_password:
-            return jsonify({'error': 'Token and password are required.'}), 400
-
-        token_data = RESET_TOKENS.get(token)
-        if not token_data:
-            return jsonify({'error': 'Invalid or expired reset token.'}), 400
-        if time.time() > token_data.get('expires', 0):
-            RESET_TOKENS.pop(token, None)
-            return jsonify({'error': 'Reset token has expired.'}), 400
-
-        hashed_pw = pbkdf2_sha256.hash(new_password)
-        supabase_req(f'users?id=eq.{token_data["user_id"]}', method='PATCH', data={'password': hashed_pw})
-        RESET_TOKENS.pop(token, None)
-        return jsonify({'message': 'Password reset successfully!'}), 200
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
 @app.route('/api/auth/google', methods=['POST'])
 def google_login():
     try:
-        data = request.get_json()
-        email = data.get('email', '').strip().lower()
-        name = data.get('name')
-        google_id = data.get('google_id')
-
-        if not email or not google_id:
-            return jsonify({'error': 'Invalid Google credentials'}), 400
+        data = request.get_json(silent=True) or {}
+        access_token = data.get('access_token')
+        if not isinstance(access_token, str) or not access_token or len(access_token) > 4096:
+            return jsonify({'error': 'A valid Google sign-in token is required.'}), 401
+        # Identity must come from Google, never from email/name sent by the browser.
+        try:
+            response = requests.get('https://www.googleapis.com/oauth2/v3/userinfo',
+                                    headers={'Authorization': 'Bearer ' + access_token}, timeout=8)
+            if not response.ok:
+                return jsonify({'error': 'Google sign-in could not be verified.'}), 401
+            identity = response.json()
+        except (requests.RequestException, ValueError):
+            return jsonify({'error': 'Google sign-in is temporarily unavailable.'}), 503
+        if identity.get('email_verified') is not True or not identity.get('email') or not identity.get('sub'):
+            return jsonify({'error': 'A verified Google email is required.'}), 401
+        email = str(identity['email']).strip().lower()
+        name = identity.get('name') or email.split('@')[0]
 
         users = supabase_req(f'users?email=eq.{email}&select=*')
         user = users[0] if users else None
@@ -308,7 +284,7 @@ def google_login():
             user_data = {
                 'name': name,
                 'email': email,
-                'password': pbkdf2_sha256.hash(google_id),
+                'password': pbkdf2_sha256.hash(secrets.token_urlsafe(32)),
                 'role': 'guest',
                 'is_verified': True
             }
@@ -316,13 +292,17 @@ def google_login():
             if isinstance(user, list): user = user[0]
 
         token = create_access_token(identity=str(user.get('id')))
-        return jsonify({'token': token, 'user': user}), 200
+        return jsonify({'token': token, 'user': public_user(user)}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/rooms', methods=['GET', 'POST'])
 def handle_rooms():
     try:
+        if request.method == 'POST':
+            user = _get_user_from_request()
+            if not user or user.get('role') != 'staff':
+                return jsonify({"error": "Staff access required."}), 403
         if request.method == 'POST':
             data = request.get_json()
             # Handle amenities if it's a list
@@ -356,13 +336,19 @@ def handle_rooms():
 def handle_services():
     try:
         if request.method == 'POST':
+            user = _get_user_from_request()
+            if not user or user.get('role') != 'staff':
+                return jsonify({"error": "Staff access required."}), 403
             data = request.get_json()
             result = supabase_req('services', method='POST', data=data)
+            if result is None:
+                return jsonify({"error": "Could not save this service. Please try again."}), 500
             return jsonify({"message": "Service created", "service": result}), 201
             
         # GET logic
         staff_param = request.args.get('staff', 'false').lower()
-        is_staff = (staff_param == 'true')
+        user = _get_user_from_request() if staff_param == 'true' else None
+        is_staff = bool(user and user.get('role') == 'staff')
         
         if is_staff:
             # Staff sees everything
@@ -394,93 +380,6 @@ def handle_services():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route('/api/services/avails', methods=['GET'])
-def get_service_avails():
-    try:
-        # Based on logs, service_availability was not found. Using service_avails.
-        # Joining with services table to get service names and prices
-        # VERIFIED SCHEMA: 'created_at' and 'status' do NOT exist. Use 'availed_at' for ordering.
-        
-        user_id = request.args.get('user_id')
-        staff_param = request.args.get('staff', 'false').lower() == 'true'
-        
-        if staff_param:
-            # Staff sees everything
-            endpoint = 'service_avails?select=*,services(name,price),users(name,email)&order=availed_at.desc'
-        elif user_id:
-            # Guest sees only their own
-            endpoint = f'service_avails?user_id=eq.{user_id}&select=*,services(name,price),users(name,email)&order=availed_at.desc'
-        else:
-            endpoint = 'service_avails?select=*,services(name,price),users(name,email)&order=availed_at.desc'
-            
-        print(f"DEBUG: Service Avails Request: {endpoint}", flush=True)
-        avails = supabase_req(endpoint)
-        
-        # Flatten the joined data for the frontend
-        formatted_avails = []
-        if avails and isinstance(avails, list):
-            for a in avails:
-                service_info = a.get('services', {})
-                user_info = a.get('users', {})
-                formatted_avails.append({
-                    "id": a.get('id'),
-                    "service_id": a.get('service_id'),
-                    "user_id": a.get('user_id'),
-                    "guest_name": (user_info.get('name') if isinstance(user_info, dict) else None) or a.get('guest_name') or '',
-                    "guest_email": (user_info.get('email') if isinstance(user_info, dict) else None) or a.get('guest_email') or '',
-                    "status": a.get('status') or "pending",
-                    "notes": a.get('notes'),
-                    "availed_at": a.get('availed_at'),
-                    "created_at": a.get('availed_at'), # Keep for frontend compatibility
-                    "service_name": service_info.get('name', 'Unknown Service'),
-                    "total_price": a.get('total_price') or service_info.get('price', 0)
-                })
-        
-        print(f"DEBUG: Returning {len(formatted_avails)} formatted avails", flush=True)
-        return jsonify({"avails": formatted_avails}), 200
-    except Exception as e:
-        print(f"Error fetching service avails: {e}", flush=True)
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/services/avails/<avail_id>', methods=['DELETE', 'PATCH'])
-def handle_service_avail_action(avail_id):
-    try:
-        if request.method == 'DELETE':
-            print(f"DEBUG: Deleting service request {avail_id}", flush=True)
-            supabase_req(f'service_avails?id=eq.{avail_id}', method='DELETE')
-            return jsonify({"message": "Service request deleted"}), 200
-            
-        if request.method == 'PATCH':
-            data = request.get_json()
-            status = (data or {}).get('status')
-            if not status:
-                return jsonify({"error": "Status is required"}), 400
-
-            valid_statuses = ('pending', 'confirmed', 'completed', 'cancelled')
-            if status not in valid_statuses:
-                return jsonify({"error": f"Invalid status. Must be one of: {', '.join(valid_statuses)}"}), 400
-
-            # Preferred behavior: persist status if the column exists.
-            try:
-                supabase_req(f'service_avails?id=eq.{avail_id}', method='PATCH', data={'status': status})
-                return jsonify({"message": f"Service request {status}", "id": avail_id, "status": status}), 200
-            except Exception as e:
-                # Fallback for older schemas where 'status' column doesn't exist.
-                err_str = str(e)
-                print(f"DEBUG: PATCH service_avails status failed: {err_str}", flush=True)
-                if status in ('confirmed', 'completed', 'cancelled') and ('status' in err_str and 'column' in err_str):
-                    try:
-                        supabase_req(f'service_avails?id=eq.{avail_id}', method='DELETE')
-                        return jsonify({"message": f"Service request {status}", "id": avail_id, "status": status}), 200
-                    except Exception as e2:
-                        print(f"DEBUG: Action DELETE service_avails failed: {e2}", flush=True)
-                        return jsonify({"error": "Failed to update service request."}), 500
-                return jsonify({"error": "Failed to update service request."}), 500
-            
-    except Exception as e:
-        print(f"Error in service avail action: {e}", flush=True)
-        return jsonify({"error": str(e)}), 500
-
 import random
 import string
 
@@ -489,184 +388,42 @@ def generate_ref():
     chars = string.ascii_uppercase + string.digits
     return "MFR-" + "".join(random.choices(chars, k=6))
 
-@app.route('/api/bookings', methods=['GET', 'POST'])
-def handle_bookings():
-    try:
-        if request.method == 'POST':
-            # ... existing POST logic ...
-            data = request.get_json()
-            room_id = data.get('room_id')
-            user_id = data.get('user_id')
-            
-            print(f"DEBUG: Booking request received. User: {user_id}, Room: {room_id}", flush=True)
-            
-            # Fetch room details for pricing
-            room_res = supabase_req(f'rooms?id=eq.{room_id}&select=*')
-            if not room_res:
-                print(f"DEBUG: Room {room_id} not found in database.", flush=True)
-                return jsonify({"error": "Room not found"}), 404
-            
-            room = room_res[0]
-            price_per_night = float(room.get('price_per_night', 0))
-            
-            # Calculate nights
-            from datetime import date
-            try:
-                ci = date.fromisoformat(data['check_in_date'])
-                co = date.fromisoformat(data['check_out_date'])
-                nights = (co - ci).days
-                if nights <= 0: nights = 1
-            except Exception as e:
-                print(f"DEBUG: Date parsing error: {e}", flush=True)
-                return jsonify({"error": "Invalid dates"}), 400
-            
-            # Final Price Calculation
-            subtotal = price_per_night * nights
-            total_price = round(subtotal + (subtotal * 0.10), 2)
-            
-            # Force user_id to int
-            if isinstance(user_id, str) and user_id.isdigit():
-                user_id = int(user_id)
-            elif not user_id:
-                # Fallback: get from token if possible
-                try:
-                    from flask_jwt_extended import get_jwt_identity
-                    token_user_id = get_jwt_identity()
-                    if token_user_id:
-                        user_id = int(token_user_id)
-                except: pass
-
-            if not user_id:
-                print("DEBUG: CRITICAL ERROR - No user_id found for booking", flush=True)
-                return jsonify({"error": "User session expired or not found"}), 401
-
-            # VERIFIED SCHEMA FROM SUPABASE ERROR LOGS:
-            # reference_code does NOT exist in the schema.
-            # check_in, check_out, total_price, status, guest_count are valid.
-            booking_data = {
-                "user_id": user_id,
-                "room_id": room_id,
-                "check_in": data.get('check_in_date') or data.get('checkIn') or data.get('check_in'),
-                "check_out": data.get('check_out_date') or data.get('checkOut') or data.get('check_out'),
-                "guest_count": int(data.get('num_guests') or data.get('guest_count') or data.get('guests') or 1),
-                "total_price": float(total_price),
-                "status": "confirmed"
-            }
-            
-            # reference_code was causing 400 errors because the column doesn't exist.
-            # We will use the Supabase-generated ID as the reference for the UI.
-            
-            print(f"DEBUG: Sending to Supabase: {booking_data}", flush=True)
-            result = supabase_req('bookings', method='POST', data=booking_data)
-            
-            # If Supabase returns nothing but didn't error, the insert likely worked.
-            # Use the result ID as a reference if available, otherwise use a local placeholder
-            res_item = result[0] if isinstance(result, list) and len(result) > 0 else (result if result else booking_data)
-            
-            # Ensure a reference exists for the confirmation screen
-            if 'id' in res_item:
-                res_item['reference_code'] = f"MFR-{res_item['id']}"
-            elif 'reference_code' not in res_item:
-                res_item['reference_code'] = generate_ref()
-                
-            return jsonify({
-                "message": "Booking successful!", 
-                "booking": res_item
-            }), 201
-        
-        # GET logic
-        is_staff = request.args.get('staff') == 'true'
-        user_id_param = request.args.get('user_id')
-        
-        print(f"DEBUG: Fetching bookings. is_staff={is_staff}, user_id_param={user_id_param}", flush=True)
-        
-        if is_staff:
-            # Staff can see all bookings
-            bookings = supabase_req('bookings?select=*&order=created_at.desc')
-        elif user_id_param:
-            # Guest sees only their own
-            # Use numeric user_id check in query
-            user_id_int = None
-            try:
-                user_id_int = int(user_id_param)
-            except:
-                pass
-                
-            # If user_id fails, we might want to allow a broader search or log more
-            endpoint = f'bookings?user_id=eq.{user_id_int if user_id_int is not None else user_id_param}&select=*&order=created_at.desc'
-            print(f"DEBUG: Supabase request for user {user_id_param}: {endpoint}", flush=True)
-            bookings = supabase_req(endpoint)
-            
-            # FALLBACK: If no bookings found by user_id, it might be a registration mismatch.
-            # Let's try to see if we can find ANY bookings just to see if the table is working.
-            if not bookings:
-                print(f"DEBUG: No bookings found for user_id {user_id_param}. Checking total table count...", flush=True)
-                all_count = supabase_req('bookings?select=id&limit=1')
-                print(f"DEBUG: Table accessibility check: {all_count}", flush=True)
-        else:
-            # Fallback if no user_id is provided
-            print("DEBUG: No user_id or staff flag provided for bookings GET", flush=True)
-            bookings = []
-            
-        print(f"DEBUG: Returning {len(bookings) if bookings else 0} bookings", flush=True)
-        return jsonify({"bookings": bookings or []}), 200
-    except Exception as e:
-        print(f"DEBUG: Error in handle_bookings: {str(e)}", flush=True)
-        return jsonify({"error": str(e)}), 500
+# Booking/payment routes use authenticated actors and transactional SQL functions.
+try:
+    from .services.booking_payments import install_booking_routes
+except ImportError:
+    from services.booking_payments import install_booking_routes
+def get_booking_env(key):
+    if not key.startswith('PAYMENT_'):
+        return get_clean_env(key)
+    value = os.getenv(key, '')
+    # Werkzeug's reloader can inherit old .env values from its parent process.
+    # Reload only public receiving details in local debug mode, preserving names.
+    if app.debug:
+        from dotenv import dotenv_values
+        local_values = dotenv_values(os.path.join(ROOT_DIR, '.env'))
+        if key in local_values:
+            value = local_values[key] or ''
+    return str(value).strip()
 
 
-@app.route('/api/bookings/<booking_id>/status', methods=['PUT'])
-def update_booking_status(booking_id):
-    try:
-        user = _get_user_from_request()
-        if not user:
-            return jsonify({"error": "Unauthorized"}), 401
-        if str(user.get('role', '')).lower() != 'staff':
-            return jsonify({"error": "Only staff can update booking status."}), 403
+booking_rpc = install_booking_routes(app, supabase_req, _get_user_from_request, get_booking_env)
+try:
+    from .services.email_delivery import install_email_delivery
+except ImportError:
+    from services.email_delivery import install_email_delivery
+def get_email_env(key):
+    # The local reloader can inherit old (including empty) values from its parent.
+    # Production continues to use the deployment's environment variables.
+    value = os.getenv(key, '')
+    if app.debug:
+        from dotenv import dotenv_values
+        local_values = dotenv_values(os.path.join(ROOT_DIR, '.env'))
+        if key in local_values:
+            value = local_values[key] or ''
+    return str(value).strip()
 
-        data = request.get_json() or {}
-        status = data.get('status')
-        if status not in ('pending', 'confirmed', 'cancelled', 'completed'):
-            return jsonify({"error": "Invalid status."}), 400
-
-        existing = supabase_req(f'bookings?id=eq.{booking_id}&select=*')
-        if not existing:
-            return jsonify({"error": "Booking not found."}), 404
-
-        supabase_req(f'bookings?id=eq.{booking_id}', method='PATCH', data={'status': status})
-        updated = supabase_req(f'bookings?id=eq.{booking_id}&select=*')
-        return jsonify({"message": "Status updated!", "booking": updated[0] if updated else {"id": booking_id, "status": status}}), 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route('/api/bookings/<booking_id>', methods=['DELETE'])
-def delete_or_cancel_booking(booking_id):
-    try:
-        user = _get_user_from_request()
-        if not user:
-            return jsonify({"error": "Unauthorized"}), 401
-
-        existing = supabase_req(f'bookings?id=eq.{booking_id}&select=*')
-        if not existing:
-            return jsonify({"error": "Booking not found."}), 404
-        booking = existing[0]
-
-        if str(user.get('role', '')).lower() == 'staff':
-            supabase_req(f'bookings?id=eq.{booking_id}', method='DELETE')
-            return jsonify({"message": "Booking deleted successfully."}), 200
-
-        # Guest cancellation (soft)
-        if str(booking.get('user_id')) != str(user.get('id')):
-            return jsonify({"error": "You can only cancel your own bookings."}), 403
-        if booking.get('status') in ('cancelled', 'completed'):
-            return jsonify({"error": f"Booking is already {booking.get('status')}."}), 400
-
-        supabase_req(f'bookings?id=eq.{booking_id}', method='PATCH', data={'status': 'cancelled'})
-        updated = supabase_req(f'bookings?id=eq.{booking_id}&select=*')
-        return jsonify({"message": "Booking cancelled successfully.", "booking": updated[0] if updated else {"id": booking_id, "status": "cancelled"}}), 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+install_email_delivery(app, booking_rpc, supabase_req, get_email_env)
 
 @app.route('/api/reviews', methods=['GET', 'POST'])
 def handle_reviews():
@@ -808,17 +565,20 @@ def get_me():
         users = supabase_req(f'users?id=eq.{user_id}&select=*')
         if not users:
             return jsonify({"error": "User not found"}), 404
-        return jsonify({"user": users[0]}), 200
+        return jsonify({"user": public_user(users[0])}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/rooms/<int:room_id>', methods=['GET', 'PUT', 'DELETE'])
 def handle_single_room(room_id):
     try:
+        if request.method in ('PUT', 'DELETE'):
+            user = _get_user_from_request()
+            if not user or user.get('role') != 'staff':
+                return jsonify({"error": "Staff access required."}), 403
         if request.method == 'PUT':
             import sys
             data = request.get_json()
-            print(f"Room PUT data received: {data}", flush=True)
             sys.stdout.flush()
             
             if not data:
@@ -842,7 +602,6 @@ def handle_single_room(room_id):
                 "image_url_4": data.get('image_url_4'),
                 "image_url_5": data.get('image_url_5')
             }
-            print(f"Room update_data: {update_data}", flush=True)
             sys.stdout.flush()
             
             # Handle amenities if it's a list
@@ -853,11 +612,9 @@ def handle_single_room(room_id):
                     update_data['amenities'] = data['amenities']
             
             result = supabase_req(f'rooms?id=eq.{room_id}', method='PATCH', data=update_data)
-            print(f"Room PATCH result: {result}", flush=True)
             sys.stdout.flush()
             # Fetch fresh data after update (Supabase PATCH doesn't return updated row)
             updated = supabase_req(f'rooms?id=eq.{room_id}&select=*')
-            print(f"Room updated fetch: {updated}", flush=True)
             sys.stdout.flush()
             return jsonify({"message": "Room updated successfully", "room": updated[0] if updated else result}), 200
         
@@ -880,9 +637,12 @@ def handle_single_room(room_id):
 @app.route('/api/services/<int:service_id>', methods=['GET', 'PUT', 'DELETE'])
 def handle_single_service(service_id):
     try:
+        if request.method in ('PUT', 'DELETE'):
+            user = _get_user_from_request()
+            if not user or user.get('role') != 'staff':
+                return jsonify({"error": "Staff access required."}), 403
         if request.method == 'PUT':
             data = request.get_json()
-            print(f"DEBUG: Updating service {service_id} with data: {data}", flush=True)
             
             # Ensure we only send valid fields to Supabase
             update_data = {}
@@ -900,91 +660,33 @@ def handle_single_service(service_id):
                 update_data['price'] = float(data['price'])
             if 'name' in data:
                 update_data['name'] = data['name']
+            if 'category' in data:
+                update_data['category'] = data['category']
+            if 'image_url' in data:
+                update_data['image_url'] = data['image_url'] or None
             if 'description' in data:
                 update_data['description'] = data['description']
                 
-            print(f"DEBUG: Final PATCH data for Supabase: {update_data}", flush=True)
             
             # Perform the update
-            supabase_req(f'services?id=eq.{service_id}', method='PATCH', data=update_data)
+            result = supabase_req(f'services?id=eq.{service_id}', method='PATCH', data=update_data)
+            if result is None:
+                return jsonify({"error": "Could not save this service. Please try again."}), 500
             
             # Immediately fetch the updated service to return it
             updated = supabase_req(f'services?id=eq.{service_id}&select=*')
             return jsonify({"message": "Service updated successfully", "service": updated[0] if updated else None}), 200
         
         if request.method == 'DELETE':
-            supabase_req(f'services?id=eq.{service_id}', method='DELETE')
-            return jsonify({"message": "Service deleted successfully"}), 200
+            result = supabase_req(f'services?id=eq.{service_id}', method='PATCH', data={'is_active': False})
+            if result is None:
+                return jsonify({"error": "Could not hide this service. Please try again."}), 500
+            return jsonify({"message": "Service hidden. Request and payment history retained."}), 200
             
         service = supabase_req(f'services?id=eq.{service_id}&select=*')
         return jsonify({"service": service[0] if service else None}), 200
     except Exception as e:
         print(f"Service update error: {e}")
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/services/<int:service_id>/avail', methods=['POST'])
-def avail_service(service_id):
-    try:
-        # Create a new entry in service_avails table based on Supabase schema
-        data = request.get_json() or {}
-        
-        # Get user_id from token (required for this action)
-        user_id = None
-        
-        # Try to get user_id from JWT token manually if flask_jwt_extended is having issues
-        auth_header = request.headers.get('Authorization')
-        if auth_header and auth_header.startswith('Bearer '):
-            received_token = auth_header.split(' ')[1]
-            try:
-                # Use flask_jwt_extended to decode if possible
-                from flask_jwt_extended import decode_token
-                decoded = decode_token(received_token)
-                user_id = decoded.get('sub') or decoded.get('identity')
-            except Exception as jwt_err:
-                print(f"DEBUG: JWT Decode error: {jwt_err}", flush=True)
-                
-        # Fallback to body if token parsing failed but we have a body user_id
-        if not user_id:
-            user_id = data.get('user_id')
-            
-        if not user_id:
-            print("DEBUG: 401 Unauthorized - No user_id found in token or body", flush=True)
-            return jsonify({"error": "User authentication required. Please log in again."}), 401
-            
-        # Ensure user_id is int
-        try: user_id = int(user_id)
-        except: pass
-            
-        # Fetch service price for total_price
-        service_res = supabase_req(f'services?id=eq.{service_id}&select=*')
-        if not service_res:
-            return jsonify({"error": "Service not found"}), 404
-        
-        service_price = float(service_res[0].get('price', 0))
-        quantity = int(data.get('quantity', 1))
-        
-        # VERIFIED SCHEMA FROM SUPABASE SCREENSHOT:
-        # user_id, service_id, booking_id, quantity, total_price, availed_at
-        # 'status' and 'notes' DO NOT exist in schema.
-        insert_data = {
-            "service_id": service_id,
-            "user_id": user_id,
-            "booking_id": data.get('booking_id'), 
-            "quantity": quantity,
-            "total_price": service_price * quantity
-        }
-        
-        print(f"DEBUG: Recording service request: {insert_data}", flush=True)
-        result = supabase_req('service_avails', method='POST', data=insert_data)
-        
-        # Manually construct response since column mapping is strict
-        res_item = result[0] if isinstance(result, list) and len(result) > 0 else (result if result else insert_data)
-        res_item['status'] = 'pending'
-        res_item['service_name'] = service_res[0].get('name')
-        
-        return jsonify({"message": "Service request submitted!", "result": res_item}), 201
-    except Exception as e:
-        print(f"Error in avail_service: {str(e)}", flush=True)
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/rooms/upload-image', methods=['POST'])
@@ -1010,18 +712,21 @@ def upload_image():
 @app.route('/')
 @app.route('/index.html')
 def serve_index():
-    return send_from_directory(ROOT_DIR, 'index.html')
+    return send_from_directory(PUBLIC_DIR, 'index.html')
 
 @app.route('/<path:path>')
 def serve_static(path):
     if path in ('index.html', ''):
-        return send_from_directory(ROOT_DIR, 'index.html')
-    file_path = os.path.join(ROOT_DIR, path)
-    if os.path.isfile(file_path):
-        return send_from_directory(ROOT_DIR, path)
+        return send_from_directory(PUBLIC_DIR, 'index.html')
+    if path.startswith('.') or path.endswith(('.py', '.sql', '.env')):
+        return jsonify({"error": "Not found"}), 404
+    if path == 'privacy.html':
+        return send_from_directory(PUBLIC_DIR, path)
+    if path.startswith('assets/'):
+        return send_from_directory(os.path.join(PUBLIC_DIR, 'assets'), path[len('assets/'):])
     if path.startswith('api/'):
         return jsonify({"error": f"API endpoint /{path} not found"}), 404
-    return send_from_directory(ROOT_DIR, 'index.html')
+    return send_from_directory(PUBLIC_DIR, 'index.html')
 
 # Vercel entry point
 handler = app
