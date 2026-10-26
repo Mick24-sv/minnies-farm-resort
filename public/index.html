@@ -7,7 +7,7 @@
   <link rel="icon" type="image/svg+xml" href="assets/images/minnies-icon.svg">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/vue/3.3.4/vue.global.prod.min.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/css/style.css?v=3.6">
+  <link rel="stylesheet" href="assets/css/style.css?v=3.7">
   <style>
     /* CRITICAL: Ensure Vue templates are hidden until rendering */
     [v-cloak] { display: none !important; }
@@ -362,13 +362,21 @@
         </div>
       </div>
       </section>
-      <div class="divider-title"><h2>Frequently Asked Questions</h2><p>Everything you need to know before visiting</p></div>
-      <div class="services-faq">
-        <div class="faq-item" v-for="faq in faqs" :key="faq.q">
-          <div class="faq-q" @click="faq.open = !faq.open">{{ faq.q }}<span>{{ faq.open ? '▲' : '▼' }}</span></div>
-          <div class="faq-a" v-if="faq.open">{{ faq.a }}</div>
-        </div>
-      </div>
+      <section class="services-faq" aria-labelledby="faq-heading">
+        <header class="faq-heading">
+          <p class="faq-eyebrow">BEFORE YOUR VISIT</p>
+          <h2 id="faq-heading">Good to know <em>before you go.</em></h2>
+          <p>Everything you need to plan a little time at the farm.</p>
+        </header>
+        <article class="faq-item" v-for="(faq, index) in faqs" :key="faq.q" :class="{ 'is-open': faq.open }">
+          <h3><button type="button" class="faq-q" :id="'faq-question-' + index" :aria-expanded="faq.open" :aria-controls="'faq-answer-' + index" @click="faq.open = !faq.open">
+            <span class="faq-number" aria-hidden="true">{{ String(index + 1).padStart(2, '0') }}</span>
+            <span class="faq-question-text">{{ faq.q }}</span>
+            <span class="faq-toggle" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 10h12"/><path class="faq-toggle-vertical" d="M10 4v12"/></svg></span>
+          </button></h3>
+          <div class="faq-a" :id="'faq-answer-' + index" role="region" :aria-labelledby="'faq-question-' + index" v-show="faq.open">{{ faq.a }}</div>
+        </article>
+      </section>
       <div style="text-align:center;padding-bottom:3rem"><p style="color:var(--muted);margin-bottom:1rem;font-size:0.93rem">Want to stay overnight instead?</p><button class="btn btn-teal" @click="navigate('rooms')">Browse Our Rooms</button></div>
     </div>
   </div>

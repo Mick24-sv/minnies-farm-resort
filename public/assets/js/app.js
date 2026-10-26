@@ -704,7 +704,7 @@ const __app = createApp({
       { q: 'Can I book the karaoke room on the same day?', a: "Yes! You can walk in and use the karaoke room if it's available. But on weekends and holidays, we highly recommend reserving in advance to secure your slot.", open: false },
       { q: 'Is the entrance fee included when I book a room?', a: "Yes! Guests who book a room at Minnie's Farm Resort enjoy complimentary resort access throughout their stay. The entrance fee only applies to walk-in day guests.", open: false },
       { q: "What are the resort's operating hours?", a: 'The resort is open daily from 7:00 AM to 9:00 PM. Day guests must exit by 8:00 PM. Karaoke sessions must end by 8:30 PM.', open: false },
-      { q: 'Can children get a discounted entrance?', a: 'Children aged 3 years old and below enter for FREE. Children 4 to 12 years old pay the regular ₱100 entrance fee.', open: false },
+      { q: 'What is the entrance fee for children?', a: 'Children aged 3 years old and below enter for FREE. Children 4 to 12 years old pay the regular ₱100 entrance fee.', open: false },
     ]);
 
     // ── NAVIGATION ─────────────────────────────────────────────────────────────
