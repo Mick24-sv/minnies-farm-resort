@@ -7,7 +7,7 @@
   <link rel="icon" type="image/svg+xml" href="assets/images/minnies-icon.svg">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/vue/3.3.4/vue.global.prod.min.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/css/style.css?v=4.0">
+  <link rel="stylesheet" href="assets/css/style.css?v=4.2">
   <style>
     /* CRITICAL: Ensure Vue templates are hidden until rendering */
     [v-cloak] { display: none !important; }
@@ -430,23 +430,31 @@
                 <p class="booking-payment-status">{{ paymentStatusLabel(b) }} &middot; Paid &#8369;{{ bookingMoney(b.amount_paid) }} &middot; Balance &#8369;{{ bookingMoney(b.balance_due) }}</p><p v-if="b.status==='pending'" class="booking-payment-deadline">{{ b.payment_review_status==='pending_review' ? 'Payment submitted - awaiting staff review.' : 'Deposit deadline: ' + paymentDeadline(b.payment_due_at) }}</p><button type="button" class="guest-text-button" @click="openPaymentDialog(b)">{{ b.status==='pending' ? 'Deposit / payment details' : 'Payment history' }}</button><footer v-if="dashTab==='upcoming' && (b.status==='pending' || b.status==='confirmed')" class="guest-booking-footer"><button type="button" class="guest-cancel" :disabled="loading || guestRefreshing" :aria-label="'Cancel reservation for ' + b.room" @click="cancelBooking(b)">Cancel reservation</button></footer>
               </article>
             </div>
-            <nav v-if="activeGuestBookings.length" class="guest-booking-pagination" aria-label="Reservation pages">
+            <div v-if="guestBookingPageCount > 1" role="navigation" class="guest-pagination" aria-label="Reservation pages">
               <p class="guest-booking-range" role="status">Showing {{ guestBookingRangeStart }}&ndash;{{ guestBookingRangeEnd }} of {{ activeGuestBookings.length }} reservations</p>
               <div class="guest-booking-page-controls">
                 <button type="button" :disabled="guestBookingPage <= 1" @click="changeGuestBookingPage(-1)" aria-label="Previous page of reservations"><span aria-hidden="true">&larr;</span> Previous</button>
                 <span class="guest-booking-page-label">Page {{ guestBookingPage }} of {{ guestBookingPageCount }}</span>
                 <button type="button" :disabled="guestBookingPage >= guestBookingPageCount" @click="changeGuestBookingPage(1)" aria-label="Next page of reservations">Next <span aria-hidden="true">&rarr;</span></button>
               </div>
-            </nav>
+            </div>
           </section>
           <section class="guest-services" aria-labelledby="guest-services-heading">
             <header class="guest-services-heading"><div><h2 id="guest-services-heading" class="guest-section-heading">Service requests <span>{{ serviceAvails.length }}</span></h2><p>Extras you've requested for your visit.</p></div><button type="button" class="guest-text-button" @click="navigate('services')">Browse services <span aria-hidden="true">&rarr;</span></button></header>
             <div v-if="!serviceAvails.length" class="guest-service-empty"><p>No service requests yet.</p><span>Explore what's available for your day at the resort.</span></div>
             <div class="guest-service-list">
-              <article v-for="a in serviceAvails" :key="a.id" class="guest-service-record">
+              <article v-for="a in pagedGuestServices" :key="a.id" class="guest-service-record">
                 <div><h3>{{ a.service_name }}</h3><p v-if="a.requested_payment_method==='cash' && a.status==='pending'" class="room-editor-help">Pay at counter &middot; MFS-{{ a.id }}</p><p class="booking-payment-status">{{ paymentStatusLabel(a) }} &middot; Balance &#8369;{{ bookingMoney(a.balance_due) }}</p><button type="button" class="guest-text-button" @click="openPaymentDialog(a, 'service')">{{ a.status==='pending' ? 'Pay / payment details' : 'Payment history' }}</button><p v-if="a.created_at || a.availed_at">Requested {{ formatGuestDate(a.created_at || a.availed_at) }}</p><span class="status-chip" :class="'status-'+a.status">{{ a.status }}</span></div>
                 <div class="guest-service-amount"><span>Total</span><p>₱{{ Number(a.total_price || 0).toLocaleString('en-PH') }}</p></div>
               </article>
+            </div>
+            <div v-if="guestServicePageCount > 1" class="guest-pagination" role="navigation" aria-label="Service request pages">
+              <p class="guest-booking-range" role="status">Showing {{ guestServiceRangeStart }}&ndash;{{ guestServiceRangeEnd }} of {{ serviceAvails.length }} requests</p>
+              <div class="guest-booking-page-controls">
+                <button type="button" :disabled="guestServicePage <= 1" @click="changeGuestServicePage(-1)" aria-label="Previous page of service requests"><span aria-hidden="true">&larr;</span> Previous</button>
+                <span class="guest-booking-page-label">Page {{ guestServicePage }} of {{ guestServicePageCount }}</span>
+                <button type="button" :disabled="guestServicePage >= guestServicePageCount" @click="changeGuestServicePage(1)" aria-label="Next page of service requests">Next <span aria-hidden="true">&rarr;</span></button>
+              </div>
             </div>
           </section>
         </div>
@@ -807,14 +815,25 @@
 
   <!-- ABOUT US -->
   <div v-if="page==='about'" class="page">
-    <div class="about-hero">
-      <div class="hero-eyebrow">Our Story</div>
-      <h1>Welcome to<br><em>Minnie's Farm Resort</em></h1>
-      <p>A peaceful sanctuary where nature, comfort, and genuine hospitality come together for an unforgettable escape.</p>
-    </div>
+    <section class="about-hero resort-about-hero" aria-labelledby="about-hero-heading">
+      <div class="about-hero-inner">
+        <div class="about-hero-copy">
+          <div class="hero-eyebrow"><span aria-hidden="true"></span> OUR STORY</div>
+          <h1 id="about-hero-heading">Rooted in family.<br><em>Open to you.</em></h1>
+          <p>Welcome to Minnie's Farm Resort. A family dream in Basud, where fresh air, simple comforts, and a warm welcome bring us together.</p>
+          <a class="about-story-link" href="#our-family-story">Get to know our story <span aria-hidden="true">&darr;</span></a>
+        </div>
+        <div class="about-hero-keepsake">
+          <svg class="about-hero-sprig" viewBox="0 0 80 100" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M30 92C32 65 42 36 58 9M37 65C16 64 11 50 13 39c18 0 27 12 24 26ZM46 44c-12-11-12-25-6-33 14 10 16 23 6 33ZM40 60c21 0 31-12 30-24-17 0-29 10-30 24ZM32 82C17 81 9 72 10 62c16-1 24 7 22 20Z"/></svg>
+          <p class="about-keepsake-label">MINNIE'S FARM RESORT</p>
+          <p class="about-keepsake-message">A place to slow down.<br>A place to feel <em>at home.</em></p>
+          <span class="about-keepsake-location">MATNOG, BASUD &middot; CAMARINES NORTE</span>
+        </div>
+      </div>
+    </section>
     <div class="container">
       <div class="about-section">
-        <div class="about-grid">
+        <div class="about-grid" id="our-family-story">
           <div class="about-img-block" style="background:none;padding:0;overflow:hidden"><img src="https://i.imgur.com/bstDhTk.jpg" style="width:100%;height:100%;object-fit:cover;border-radius:20px;" /></div>
           <div class="about-text">
             <h2>A <em>Family Dream</em><br>Turned Into Reality</h2>
@@ -941,6 +960,6 @@
   </div>
 
 </div>
-<script src="assets/js/app.js?v=4.7"></script>
+<script src="assets/js/app.js?v=4.8"></script>
 </body>
 </html>

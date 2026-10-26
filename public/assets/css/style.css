@@ -2496,8 +2496,8 @@
 .payment-qr-pending { margin-top: 16px; padding: 12px 14px; border: 1px dashed #ced7c6; border-radius: 8px; background: #fafbf7; }
 
 /* Guest reservation pagination. */
-#guest-bookings-heading { scroll-margin-top: 88px; }
-.guest-booking-pagination { position: static; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; height: auto; margin-top: 24px; padding: 20px 0 0; border-top: 1px solid #dce0d4; background: transparent; z-index: auto; }
+#guest-bookings-heading, #guest-services-heading { scroll-margin-top: 88px; }
+.guest-pagination { position: static; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; height: auto; margin-top: 24px; padding: 20px 0 0; border-top: 1px solid #dce0d4; background: transparent; box-shadow: none; z-index: auto; }
 .guest-booking-range { color: #62705b; font-size: 12px; line-height: 1.7; }
 .guest-booking-page-controls { display: flex; align-items: center; gap: 16px; }
 .guest-booking-page-controls button { display: inline-flex; align-items: center; justify-content: center; gap: 10px; min-height: 44px; padding: 10px 16px; border: 1px solid #cfd9c6; border-radius: 8px; background: white; color: #345133; font: 500 12px/1.5 'DM Sans', sans-serif; cursor: pointer; }
@@ -2506,9 +2506,46 @@
 .guest-booking-page-controls button:focus-visible { outline: 2px solid var(--teal); outline-offset: 3px; }
 .guest-booking-page-label { color: #52654a; font-size: 12px; white-space: nowrap; }
 @media (max-width: 600px) {
-  .guest-booking-pagination { flex-direction: column; align-items: stretch; gap: 12px; }
+  .guest-pagination { flex-direction: column; align-items: stretch; gap: 12px; }
   .guest-booking-range { text-align: center; }
   .guest-booking-page-controls { justify-content: space-between; gap: 8px; }
   .guest-booking-page-controls button { padding: 10px 12px; gap: 6px; }
   .guest-booking-page-label { font-size: 11px; }
+}
+
+/* About introduction: quiet forest palette and an editorial family story. */
+.resort-about-hero { padding: 72px 40px; background: #193c32; text-align: left; border-bottom: 1px solid #315145; }
+.resort-about-hero::before { content: none; }
+.about-hero-inner { display: grid; grid-template-columns: 1.35fr 1fr; align-items: center; gap: 80px; max-width: 1200px; margin: 0 auto; }
+.resort-about-hero .hero-eyebrow { display: flex; align-items: center; gap: 10px; margin-bottom: 26px; color: #dfcf9c; font-size: 10px; line-height: 1.7; letter-spacing: .18em; }
+.resort-about-hero .hero-eyebrow > span { width: 6px; height: 6px; border-radius: 50%; background: #dfcf9c; }
+.resort-about-hero h1 { margin-bottom: 24px; color: #fffdf6; font-size: clamp(44px, 5.1vw, 74px); font-weight: 400; line-height: 1.06; letter-spacing: -.035em; }
+.resort-about-hero h1 em { color: #e6ce92; }
+.resort-about-hero .about-hero-copy > p { max-width: 470px; margin: 0; color: #d6e0d7; font-size: 15px; line-height: 1.9; }
+.about-story-link { display: inline-flex; align-items: center; gap: 28px; min-height: 48px; margin-top: 24px; padding: 10px 0; border-bottom: 1px solid #a4b79f; color: #f1dfb7; font-size: 13px; text-decoration: none; }
+.about-story-link:hover { color: white; border-color: white; }
+.about-story-link:focus-visible { outline: 2px solid #f1dfb7; outline-offset: 5px; }
+#our-family-story { scroll-margin-top: 88px; }
+.about-hero-keepsake { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 340px; padding: 36px 24px; border: 1px solid #ffffff29; border-radius: 160px 160px 14px 14px; background: #ffffff04; text-align: center; }
+.about-hero-sprig { width: 64px; height: 80px; margin-bottom: 22px; color: #d5c493; }
+.resort-about-hero .about-keepsake-label { margin: 0 0 18px; color: #c2d0bc; font-size: 9px; line-height: 1.7; letter-spacing: .2em; }
+.resort-about-hero .about-keepsake-message { margin: 0 0 26px; color: #f8f5e9; font: 400 clamp(26px, 2.6vw, 36px)/1.2 'Cormorant Garamond', serif; }
+.about-keepsake-message em { color: #e6ce92; }
+.about-keepsake-location { color: #c2d0bc; font-size: 8px; line-height: 1.8; letter-spacing: .12em; }
+@media (max-width: 1000px) {
+  .resort-about-hero { padding: 54px 28px; }
+  .about-hero-inner { gap: 36px; }
+  .about-hero-keepsake { min-height: 320px; padding: 32px 18px; }
+}
+@media (max-width: 700px) {
+  .resort-about-hero { padding: 42px 22px 30px; }
+  .about-hero-inner { grid-template-columns: minmax(0, 1fr); gap: 32px; }
+  .resort-about-hero h1 { font-size: clamp(42px, 10vw, 60px); }
+  .resort-about-hero .hero-eyebrow { margin-bottom: 22px; font-size: 9px; }
+  .resort-about-hero .about-hero-copy > p { font-size: 14px; }
+  .about-story-link { margin-top: 18px; }
+  .about-hero-keepsake { min-height: 0; padding: 26px 18px; border-radius: 16px; }
+  .about-hero-sprig { width: 42px; height: 52px; margin-bottom: 14px; }
+  .resort-about-hero .about-keepsake-label { margin-bottom: 12px; }
+  .resort-about-hero .about-keepsake-message { margin-bottom: 18px; font-size: 29px; }
 }

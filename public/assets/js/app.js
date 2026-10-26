@@ -681,6 +681,20 @@ const __app = createApp({
       document.getElementById('guest-bookings-heading')?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block: 'start' });
     }
 
+    const guestServicePage = ref(1);
+    const guestServicePageSize = 3;
+    const guestServicePageCount = computed(() => Math.max(1, Math.ceil(serviceAvails.value.length / guestServicePageSize)));
+    const guestServiceRangeStart = computed(() => serviceAvails.value.length ? (guestServicePage.value - 1) * guestServicePageSize + 1 : 0);
+    const guestServiceRangeEnd = computed(() => Math.min(guestServicePage.value * guestServicePageSize, serviceAvails.value.length));
+    const pagedGuestServices = computed(() => serviceAvails.value.slice((guestServicePage.value - 1) * guestServicePageSize, guestServicePage.value * guestServicePageSize));
+    watch(currentUser, () => { guestServicePage.value = 1; }, { flush: 'sync' });
+    watch(guestServicePageCount, count => { guestServicePage.value = Math.min(guestServicePage.value, count); }, { flush: 'sync' });
+    async function changeGuestServicePage(direction) {
+      guestServicePage.value = Math.max(1, Math.min(guestServicePageCount.value, guestServicePage.value + direction));
+      await nextTick();
+      document.getElementById('guest-services-heading')?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block: 'start' });
+    }
+
     // Finds a completed booking for the selected room that the current user
     // owns and hasn't reviewed yet — this unlocks the "Leave a Review" form.
     const eligibleBooking = computed(() => {
@@ -1743,6 +1757,7 @@ const __app = createApp({
       bookingForm, roomForm, lastBooking, allBookings, features, teamMembers, faqs,
       filteredRooms, bookingNights, bookingTotal, upcomingBookings, pastBookings,
       guestBookingPage, guestBookingPageCount, guestBookingRangeStart, guestBookingRangeEnd, activeGuestBookings, pagedGuestBookings, changeGuestBookingPage,
+      guestServicePage, guestServicePageCount, guestServiceRangeStart, guestServiceRangeEnd, pagedGuestServices, changeGuestServicePage,
       navigate, doLogin, doRegister, logout, googleLogin, doForgotPassword, doResetPassword,
       showForgotPassword, forgotEmail, forgotMsg, forgotMsgType,
       showResetPassword, resetPassword, resetPasswordConfirm, resetMsg, resetMsgType, resetFilters, fetchRooms, fetchCurrentUser,
