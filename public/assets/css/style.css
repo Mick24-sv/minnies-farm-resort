@@ -2412,3 +2412,77 @@
         transform: none;
       }
     }
+
+/* Responsive home and services introductions. */
+.resort-home-hero { padding: 72px 40px; background: #193c32; text-align: left; }
+.resort-home-hero::before, .resort-services-hero::before { content: none; }
+.resort-hero-inner { display: grid; grid-template-columns: 1.08fr 1fr; align-items: center; gap: 64px; max-width: 1200px; margin: 0 auto; }
+.resort-home-hero .hero-eyebrow { display: flex; align-items: center; gap: 10px; margin-bottom: 26px; color: #dfcf9c; font-size: 10px; line-height: 1.7; letter-spacing: .18em; }
+.resort-home-hero .hero-eyebrow > span { width: 6px; height: 6px; border-radius: 50%; background: #dfcf9c; flex-shrink: 0; }
+.resort-home-hero h1 { margin-bottom: 24px; font-size: clamp(46px, 5.1vw, 76px); font-weight: 400; line-height: 1.04; letter-spacing: -.035em; text-wrap: balance; }
+.resort-home-hero h1 em { color: #e6ce92; }
+.resort-home-hero .resort-hero-copy > p { max-width: 430px; margin: 0 0 30px; color: #d6e0d7; font-size: 15px; line-height: 1.9; }
+.resort-home-hero .hero-actions { justify-content: flex-start; gap: 12px; }
+.resort-home-hero .hero-actions .btn { display: flex; align-items: center; justify-content: space-between; gap: 26px; min-height: 52px; padding: 14px 22px; border-radius: 8px; font-size: 13px; letter-spacing: 0; }
+.resort-home-hero .btn-primary { background: #e5d1a1; color: #193c32; }
+.resort-home-hero .btn-primary:hover { background: #f1dfb7; }
+.resort-home-hero .btn-outline { border: 1px solid #ffffff45; color: #f8f6ef; background: transparent; }
+.resort-home-hero .btn-outline:hover { background: #ffffff0d; border-color: #ffffff99; }
+.resort-home-hero .btn:focus-visible { outline: 2px solid #f1dfb7; outline-offset: 5px; }
+.resort-hero-note { display: flex; align-items: center; gap: 10px; margin-top: 34px; color: #c1d0c5; font-size: 11px; line-height: 1.8; }
+.resort-hero-note > span { color: #e6ce92; font-size: 22px; }
+.resort-hero-visual { position: relative; min-width: 0; height: 450px; margin: 0; overflow: hidden; border: 1px solid #ffffff26; border-radius: 120px 16px 16px 16px; background: linear-gradient(140deg, #758c68, #2e5544); isolation: isolate; }
+.resort-hero-visual::after { content: ''; position: absolute; inset: 0; z-index: -1; background: linear-gradient(180deg, #10291d08 35%, #10291dcc); }
+.resort-hero-visual img { position: absolute; inset: 0; z-index: -2; width: 100%; height: 100%; object-fit: cover; }
+.resort-hero-visual figcaption { position: absolute; bottom: 30px; left: 30px; right: 24px; color: white; }
+.resort-hero-visual figcaption > span { display: block; margin-bottom: 10px; font-size: 9px; letter-spacing: .18em; line-height: 1.6; }
+.resort-hero-visual figcaption strong { font: 400 32px/1.15 'Cormorant Garamond', serif; }
+.resort-photo-mark { position: absolute; top: 22px; right: 22px; width: 94px; height: 94px; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 1px solid #fff8; border-radius: 50%; background: #193c3273; color: #fff7df; font: 400 23px/1.1 'Cormorant Garamond', serif; text-align: center; }
+.resort-photo-mark em { font-size: 17px; }
+.resort-services-hero { padding: 64px 40px; background: #eeeadf; border-bottom: 1px solid #dcd9cb; text-align: left; }
+.services-hero-inner { display: grid; grid-template-columns: 1.5fr 1fr; align-items: center; gap: 80px; max-width: 1200px; margin: 0 auto; }
+.resort-services-hero .hero-eyebrow { margin-bottom: 22px; color: #53654b; font-size: 10px; letter-spacing: .18em; }
+.resort-services-hero h1 { margin-bottom: 22px; color: #243e31; font-size: clamp(42px, 4.5vw, 64px); font-weight: 400; line-height: 1.07; letter-spacing: -.03em; }
+.resort-services-hero h1 em { color: #61724f; }
+.resort-services-hero .services-hero-copy > p { max-width: 450px; margin: 0; color: #566252; font-size: 15px; line-height: 1.85; }
+.services-visit-note { padding: 28px 30px; border: 1px solid #d5d7c8; border-radius: 16px; background: #f8f6ee; }
+.services-visit-icon { display: block; width: 32px; height: 32px; margin-bottom: 22px; color: #7b6d3c; }
+.services-visit-icon svg { width: 100%; height: 100%; }
+.services-visit-label { color: #647057; font-size: 9px; letter-spacing: .12em; line-height: 1.8; }
+.services-visit-note h2 { margin: 10px 0; color: #243e31; font: 400 30px/1.15 'Cormorant Garamond', serif; }
+.resort-services-hero .services-visit-note p { margin: 0; color: #566252; font-size: 13px; line-height: 1.8; }
+@media (max-width: 1000px) {
+  .resort-home-hero { padding: 54px 28px; }
+  .resort-hero-inner { gap: 32px; }
+  .resort-hero-visual { height: 420px; border-top-left-radius: 90px; }
+  .resort-home-hero .hero-actions .btn { padding: 13px 16px; gap: 16px; }
+  .services-hero-inner { gap: 40px; }
+}
+@media (max-width: 700px) {
+  .resort-home-hero { padding: 42px 22px 28px; }
+  .resort-hero-inner, .services-hero-inner { grid-template-columns: minmax(0, 1fr); gap: 30px; }
+  .resort-home-hero h1 { font-size: clamp(42px, 9.5vw, 60px); }
+  .resort-home-hero .hero-eyebrow { margin-bottom: 22px; font-size: 9px; }
+  .resort-home-hero .resort-hero-copy > p { max-width: 480px; font-size: 14px; margin-bottom: 24px; }
+  .resort-home-hero .hero-actions { display: grid; grid-template-columns: 1fr 1fr; }
+  .resort-home-hero .hero-actions .btn { gap: 10px; padding: 14px; font-size: 12px; }
+  .resort-hero-note { margin-top: 22px; font-size: 10px; }
+  .resort-hero-visual { height: 300px; border-radius: 70px 12px 12px 12px; }
+  .resort-photo-mark { width: 76px; height: 76px; font-size: 20px; top: 16px; right: 16px; }
+  .resort-photo-mark em { font-size: 15px; }
+  .resort-hero-visual figcaption { bottom: 24px; left: 24px; }
+  .resort-hero-visual figcaption strong { font-size: 29px; }
+  .resort-services-hero { padding: 42px 22px 30px; }
+  .resort-services-hero h1 { font-size: clamp(40px, 9vw, 56px); }
+  .resort-services-hero .services-hero-copy > p { font-size: 14px; }
+  .services-visit-note { padding: 24px; }
+  .services-visit-icon { margin-bottom: 16px; }
+}
+@media (max-width: 360px) {
+  .resort-home-hero .hero-actions { grid-template-columns: 1fr; }
+  .resort-hero-note { font-size: 9px; gap: 7px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .resort-home-hero .btn { transition: none; }
+  .resort-home-hero .btn:hover { transform: none; }
+}

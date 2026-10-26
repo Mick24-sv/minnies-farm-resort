@@ -7,7 +7,7 @@
   <link rel="icon" type="image/svg+xml" href="assets/images/minnies-icon.svg">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/vue/3.3.4/vue.global.prod.min.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/css/style.css?v=3.7">
+  <link rel="stylesheet" href="assets/css/style.css?v=3.8">
   <style>
     /* CRITICAL: Ensure Vue templates are hidden until rendering */
     [v-cloak] { display: none !important; }
@@ -150,15 +150,25 @@
 
   <!-- HOME -->
   <div v-if="page==='home'" id="page-home" class="page">
-    <div class="hero">
-      <div class="hero-eyebrow">Farm-to-Nature Resort Experience</div>
-      <h1>Welcome to<br><em>Minnie's Farm Resort</em></h1>
-      <p>Escape the city and reconnect with nature. Enjoy cozy farm-inspired rooms, fresh air, and warm hospitality in every stay.</p>
-      <div class="hero-actions">
-          <button type="button" class="btn btn-primary" @click="navigate('rooms')">Browse Rooms</button>
-          <button type="button" class="btn btn-outline" @click="navigate('services')">Our Services</button>
+    <section class="hero resort-home-hero" aria-labelledby="home-hero-heading">
+      <div class="resort-hero-inner">
+        <div class="resort-hero-copy">
+          <div class="hero-eyebrow"><span aria-hidden="true"></span> BASUD, CAMARINES NORTE</div>
+          <h1 id="home-hero-heading">Slow down.<br>Stay close to <em>nature.</em></h1>
+          <p>Welcome to Minnie's Farm Resort. A little fresh air, a cozy place to stay, and more time with the people you love.</p>
+          <div class="hero-actions">
+            <button type="button" class="btn btn-primary" @click="navigate('rooms')">Find your stay <span aria-hidden="true">&nearr;</span></button>
+            <button type="button" class="btn btn-outline" @click="navigate('services')">Explore day visits <span aria-hidden="true">&rarr;</span></button>
+          </div>
+          <div class="resort-hero-note"><span aria-hidden="true">✧</span> Room stays &nbsp; / &nbsp; Day visits &nbsp; / &nbsp; Good company</div>
+        </div>
+        <figure class="resort-hero-visual">
+          <img src="https://i.imgur.com/2UDN3qi.jpg" alt="A glimpse of Minnie's Farm Resort" fetchpriority="high" decoding="async" referrerpolicy="no-referrer" @error="$event.target.style.display='none'">
+          <figcaption><span>YOUR EVERYDAY ESCAPE</span><strong>A little closer to nature.</strong></figcaption>
+          <span class="resort-photo-mark" aria-hidden="true">Minnie's<br><em>Farm Resort</em></span>
+        </figure>
       </div>
-    </div>
+    </section>
     <div class="container">
       <section class="home-features" aria-labelledby="home-features-heading">
         <header class="home-features-heading">
@@ -316,11 +326,21 @@
   </main>
   <!-- SERVICES -->
   <div v-if="page==='services'" class="page" v-cloak>
-    <div class="services-hero">
-      <div class="hero-eyebrow">What We Offer</div>
-      <h1>Resort <em>Services</em></h1>
-      <p>You don't need to book a room to enjoy Minnie's Farm Resort. Drop in, have fun, and make memories!</p>
-    </div>
+    <section class="services-hero resort-services-hero" aria-labelledby="services-hero-heading">
+      <div class="services-hero-inner">
+        <div class="services-hero-copy">
+          <div class="hero-eyebrow">MAKE A DAY OF IT</div>
+          <h1 id="services-hero-heading">A little escape.<br><em>A whole lot to enjoy.</em></h1>
+          <p>Fresh air, your favorite people, and a day at the farm. Discover resort services for your next visit.</p>
+        </div>
+        <aside class="services-visit-note" aria-label="Day visit information">
+          <span class="services-visit-icon" aria-hidden="true"><svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="16" cy="16" r="6"/><path d="M16 2v4m0 20v4M2 16h4m20 0h4M6 6l3 3m14 14 3 3M6 26l3-3M23 9l3-3"/></svg></span>
+          <span class="services-visit-label">JUST HERE FOR THE DAY?</span>
+          <h2>You're welcome here.</h2>
+          <p>Enjoy the resort without booking a room. Walk in for a day visit or explore the services below.</p>
+        </aside>
+      </div>
+    </section>
     <div class="container">
       <section class="service-selection" aria-labelledby="service-selection-heading">
       <header class="service-selection-heading">
