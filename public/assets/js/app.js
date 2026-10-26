@@ -396,6 +396,9 @@ const __app = createApp({
         if (kind === 'booking' && lastBooking.value.id === record.id) lastBooking.value = { ...paymentBooking.value };
         paymentForm.value = { method: record.requested_payment_method || record.submitted_payment_method || (currentUser.value?.role === 'staff' ? 'cash' : paymentOptions.value.accounts[0]?.method || (kind === 'service' ? 'cash' : 'gcash')), reference: record.payment_review_status === 'pending_review' ? record.submitted_payment_reference || '' : '',
           proof: '', amount: record.deposit_due > 0 ? record.deposit_due : record.balance_due, verified: false, note: '' };
+        if (currentUser.value?.role !== 'staff' && !(kind === 'service' && paymentForm.value.method === 'cash') && !paymentOptions.value.accounts.some(account => account.method === paymentForm.value.method)) {
+          paymentForm.value.method = paymentOptions.value.accounts[0]?.method || (kind === 'service' ? 'cash' : '');
+        }
         showPaymentDialog.value = true;
         return true;
       } catch (error) { if (session === token.value) showToast(error.message, 'error'); return false; } finally { paymentBusy.value = false; }

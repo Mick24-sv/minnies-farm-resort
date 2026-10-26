@@ -3,19 +3,18 @@
 ## Required setup
 
 1. Run [the booking/payment migration](../database/migrations/20261025_booking_payments.sql) in the Supabase SQL Editor **before restarting or deploying this version**. It adds payment fields, a payment ledger, and transactional functions. Existing bookings remain unpaid in the application until staff record verified receipts; do not assume old bookings were never paid in real life.
-2. Set the receiving account details in `.env` for local development and in the hosting environment for deployment. Empty fields have been added locally. Use a real receiving account, not the example text below. Neither a PIN nor an OTP belongs here.
+2. The supplied MariBank QR is bundled at `public/assets/images/maribank-qr.png` and is available for room deposits and service payments. The original image is displayed without cropping and can be downloaded for payment on the same phone.
+
+GCash remains unavailable until its verified QR is ready. Add the original image under `public/assets/images/` and configure:
 
 ```env
 PAYMENT_GCASH_NAME=
-PAYMENT_GCASH_NUMBER=
-PAYMENT_BANK_NAME=
-PAYMENT_BANK_ACCOUNT_NAME=
-PAYMENT_BANK_ACCOUNT_NUMBER=
+PAYMENT_GCASH_QR_URL=/assets/images/gcash-qr.png
 ```
 
-A GCash account requires a name and an 11-digit number beginning `09`. A bank account requires all three bank fields. Configure either or both. These receiving details are intentionally displayed to customers. Online deposit bookings stay unavailable until at least one valid receiving account is configured. The Supabase backend must use its server-side service-role credential; SQL functions are not executable by anonymous/browser clients.
+Keep the GCash QR URL empty until its image is supplied and verified. Only local PNG, JPG, JPEG, or WebP paths under `/assets/images/` are accepted. Redeploy after changing hosted environment settings. Local Flask debug mode rereads payment settings from `.env`.
 
-In local Flask debug mode, receiving-account fields are reread from `.env` when payment options are requested. Reopen a room or use **Recheck payment options** after editing them. Hosted deployments read their environment settings and require a restart/redeployment after changes. Spaces in account-holder and bank names are preserved.
+Raw account numbers are no longer returned by the payment-options API or displayed in payment instructions. Legacy `PAYMENT_GCASH_NUMBER` and `PAYMENT_BANK_ACCOUNT_NUMBER` settings are unused and may be removed. QR codes still carry payment routing information, and banking apps can display the recipient name. Check the recipient before paying.
 
 ## Online reservations
 

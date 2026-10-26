@@ -2486,3 +2486,11 @@
   .resort-home-hero .btn { transition: none; }
   .resort-home-hero .btn:hover { transform: none; }
 }
+
+/* Preserve the original QR image and its quiet zone for reliable scanning. */
+.payment-qr-image { display: block; width: min(100%, 340px); height: auto; margin: 16px auto; background: white; border-radius: 8px; }
+.payment-qr-help { max-width: 380px; margin: 12px auto; color: #52675d; font-size: 12px; line-height: 1.8; text-align: center; }
+.payment-qr-download { display: flex; justify-content: center; align-items: center; gap: 16px; min-height: 46px; max-width: 340px; margin: 16px auto 0; padding: 10px 18px; border: 1px solid #b5c9b4; border-radius: 8px; color: #244e3d; background: white; font-size: 13px; text-decoration: none; }
+.payment-qr-download:hover { background: #edf3e9; }
+.payment-qr-download:focus-visible { outline: 2px solid var(--teal); outline-offset: 3px; }
+.payment-qr-pending { margin-top: 16px; padding: 12px 14px; border: 1px dashed #ced7c6; border-radius: 8px; background: #fafbf7; }

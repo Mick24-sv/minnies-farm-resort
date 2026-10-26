@@ -33,12 +33,18 @@ ERRORS = {
 
 def payment_config(env):
     accounts = []
-    name, number = env('PAYMENT_GCASH_NAME'), env('PAYMENT_GCASH_NUMBER')
-    if name and re.fullmatch(r'09\d{9}', number or '') and 'registered account' not in name.lower():
-        accounts.append({'method': 'gcash', 'label': 'GCash', 'name': name, 'number': number})
-    bank, owner, account = (env('PAYMENT_BANK_NAME'), env('PAYMENT_BANK_ACCOUNT_NAME'), env('PAYMENT_BANK_ACCOUNT_NUMBER'))
-    if bank and owner and account and not any('YOUR_' in value for value in (bank, owner, account)):
-        accounts.append({'method': 'bank_transfer', 'label': bank, 'name': owner, 'number': account})
+    # Only publish QR assets and recipient names, never raw account numbers.
+    # Restrict configurable images to local payment assets.
+    def qr_asset(value):
+        return value if re.fullmatch(r'/assets/images/[\w-]+\.(?:png|jpg|jpeg|webp)', value or '') else ''
+
+    gcash_qr = qr_asset(env('PAYMENT_GCASH_QR_URL'))
+    if gcash_qr:
+        accounts.append({'method': 'gcash', 'label': 'GCash',
+                         'name': env('PAYMENT_GCASH_NAME'), 'qr_url': gcash_qr})
+    accounts.append({'method': 'bank_transfer', 'label': 'MariBank',
+                     'name': 'MICK DANIEL MORALES',
+                     'qr_url': '/assets/images/maribank-qr.png'})
     return {'configured': bool(accounts), 'accounts': accounts, 'deposit_percent': 50, 'hold_hours': 3}
 
 
