@@ -7,7 +7,7 @@
   <link rel="icon" type="image/svg+xml" href="assets/images/minnies-icon.svg">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/vue/3.3.4/vue.global.prod.min.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/css/style.css?v=3.9">
+  <link rel="stylesheet" href="assets/css/style.css?v=4.0">
   <style>
     /* CRITICAL: Ensure Vue templates are hidden until rendering */
     [v-cloak] { display: none !important; }
@@ -424,12 +424,20 @@
               <button v-if="dashTab==='upcoming'" type="button" class="guest-primary" @click="navigate('rooms')">Explore rooms <span aria-hidden="true">&rarr;</span></button>
             </div>
             <div class="guest-booking-list">
-              <article v-for="b in (dashTab==='upcoming' ? upcomingBookings : pastBookings)" :key="b.id" class="guest-booking">
+              <article v-for="b in pagedGuestBookings" :key="b.id" class="guest-booking">
                 <header class="guest-booking-heading"><div><p class="guest-reference">Reservation #{{ b.id }}</p><h3>{{ b.room }}</h3></div><span class="status-chip" :class="'status-'+b.status">{{ b.status }}</span></header>
                 <dl class="guest-booking-details"><div><dt>Check-in</dt><dd><time :datetime="b.checkIn">{{ formatGuestDate(b.checkIn) }}</time></dd></div><div><dt>Check-out</dt><dd><time :datetime="b.checkOut">{{ formatGuestDate(b.checkOut) }}</time></dd></div><div><dt>Reservation total</dt><dd class="guest-total">₱{{ Number(b.total || 0).toLocaleString('en-PH') }}</dd></div></dl>
                 <p class="booking-payment-status">{{ paymentStatusLabel(b) }} &middot; Paid &#8369;{{ bookingMoney(b.amount_paid) }} &middot; Balance &#8369;{{ bookingMoney(b.balance_due) }}</p><p v-if="b.status==='pending'" class="booking-payment-deadline">{{ b.payment_review_status==='pending_review' ? 'Payment submitted - awaiting staff review.' : 'Deposit deadline: ' + paymentDeadline(b.payment_due_at) }}</p><button type="button" class="guest-text-button" @click="openPaymentDialog(b)">{{ b.status==='pending' ? 'Deposit / payment details' : 'Payment history' }}</button><footer v-if="dashTab==='upcoming' && (b.status==='pending' || b.status==='confirmed')" class="guest-booking-footer"><button type="button" class="guest-cancel" :disabled="loading || guestRefreshing" :aria-label="'Cancel reservation for ' + b.room" @click="cancelBooking(b)">Cancel reservation</button></footer>
               </article>
             </div>
+            <nav v-if="activeGuestBookings.length" class="guest-booking-pagination" aria-label="Reservation pages">
+              <p class="guest-booking-range" role="status">Showing {{ guestBookingRangeStart }}&ndash;{{ guestBookingRangeEnd }} of {{ activeGuestBookings.length }} reservations</p>
+              <div class="guest-booking-page-controls">
+                <button type="button" :disabled="guestBookingPage <= 1" @click="changeGuestBookingPage(-1)" aria-label="Previous page of reservations"><span aria-hidden="true">&larr;</span> Previous</button>
+                <span class="guest-booking-page-label">Page {{ guestBookingPage }} of {{ guestBookingPageCount }}</span>
+                <button type="button" :disabled="guestBookingPage >= guestBookingPageCount" @click="changeGuestBookingPage(1)" aria-label="Next page of reservations">Next <span aria-hidden="true">&rarr;</span></button>
+              </div>
+            </nav>
           </section>
           <section class="guest-services" aria-labelledby="guest-services-heading">
             <header class="guest-services-heading"><div><h2 id="guest-services-heading" class="guest-section-heading">Service requests <span>{{ serviceAvails.length }}</span></h2><p>Extras you've requested for your visit.</p></div><button type="button" class="guest-text-button" @click="navigate('services')">Browse services <span aria-hidden="true">&rarr;</span></button></header>
@@ -933,6 +941,6 @@
   </div>
 
 </div>
-<script src="assets/js/app.js?v=4.6"></script>
+<script src="assets/js/app.js?v=4.7"></script>
 </body>
 </html>

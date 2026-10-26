@@ -666,6 +666,21 @@ const __app = createApp({
       return allBookings.value.filter(b => (b.check_in || b.check_in_date) < today || b.status === 'cancelled' || b.status === 'completed');
     });
 
+    const guestBookingPage = ref(1);
+    const guestBookingPageSize = 3;
+    const activeGuestBookings = computed(() => dashTab.value === 'upcoming' ? upcomingBookings.value : pastBookings.value);
+    const guestBookingPageCount = computed(() => Math.max(1, Math.ceil(activeGuestBookings.value.length / guestBookingPageSize)));
+    const guestBookingRangeStart = computed(() => activeGuestBookings.value.length ? (guestBookingPage.value - 1) * guestBookingPageSize + 1 : 0);
+    const guestBookingRangeEnd = computed(() => Math.min(guestBookingPage.value * guestBookingPageSize, activeGuestBookings.value.length));
+    const pagedGuestBookings = computed(() => activeGuestBookings.value.slice((guestBookingPage.value - 1) * guestBookingPageSize, guestBookingPage.value * guestBookingPageSize));
+    watch([dashTab, currentUser], () => { guestBookingPage.value = 1; }, { flush: 'sync' });
+    watch(guestBookingPageCount, count => { guestBookingPage.value = Math.min(guestBookingPage.value, count); }, { flush: 'sync' });
+    async function changeGuestBookingPage(direction) {
+      guestBookingPage.value = Math.max(1, Math.min(guestBookingPageCount.value, guestBookingPage.value + direction));
+      await nextTick();
+      document.getElementById('guest-bookings-heading')?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block: 'start' });
+    }
+
     // Finds a completed booking for the selected room that the current user
     // owns and hasn't reviewed yet — this unlocks the "Leave a Review" form.
     const eligibleBooking = computed(() => {
@@ -1727,6 +1742,7 @@ const __app = createApp({
       today, currentUser, token, loginForm, regForm, showLoginPw, showRegPw, showRegConfirmPw, rooms, filters, selectedRoom,
       bookingForm, roomForm, lastBooking, allBookings, features, teamMembers, faqs,
       filteredRooms, bookingNights, bookingTotal, upcomingBookings, pastBookings,
+      guestBookingPage, guestBookingPageCount, guestBookingRangeStart, guestBookingRangeEnd, activeGuestBookings, pagedGuestBookings, changeGuestBookingPage,
       navigate, doLogin, doRegister, logout, googleLogin, doForgotPassword, doResetPassword,
       showForgotPassword, forgotEmail, forgotMsg, forgotMsgType,
       showResetPassword, resetPassword, resetPasswordConfirm, resetMsg, resetMsgType, resetFilters, fetchRooms, fetchCurrentUser,
