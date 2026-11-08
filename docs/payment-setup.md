@@ -5,14 +5,13 @@
 1. Run [the booking/payment migration](../database/migrations/20261025_booking_payments.sql) in the Supabase SQL Editor **before restarting or deploying this version**. It adds payment fields, a payment ledger, and transactional functions. Existing bookings remain unpaid in the application until staff record verified receipts; do not assume old bookings were never paid in real life.
 2. The supplied MariBank QR is bundled at `public/assets/images/maribank-qr.png` and is available for room deposits and service payments. The original image is displayed without cropping and can be downloaded for payment on the same phone.
 
-GCash remains unavailable until its verified QR is ready. Add the original image under `public/assets/images/` and configure:
+GCash is enabled automatically when the original supplied QR is saved as `public/assets/images/gcash-qr.png`. The recipient label uses the masked name printed on the QR. An alternative local image path can be configured with:
 
 ```env
-PAYMENT_GCASH_NAME=
 PAYMENT_GCASH_QR_URL=/assets/images/gcash-qr.png
 ```
 
-Keep the GCash QR URL empty until its image is supplied and verified. Only local PNG, JPG, JPEG, or WebP paths under `/assets/images/` are accepted. Redeploy after changing hosted environment settings. Local Flask debug mode rereads payment settings from `.env`.
+Keep the GCash QR URL empty when using the bundled image. Without a bundled image or configured URL, GCash remains unavailable. Only local PNG, JPG, JPEG, or WebP paths under `/assets/images/` are accepted. Redeploy after changing hosted environment settings. Local Flask debug mode rereads payment settings from `.env`.
 
 Raw account numbers are no longer returned by the payment-options API or displayed in payment instructions. Legacy `PAYMENT_GCASH_NUMBER` and `PAYMENT_BANK_ACCOUNT_NUMBER` settings are unused and may be removed. QR codes still carry payment routing information, and banking apps can display the recipient name. Check the recipient before paying.
 

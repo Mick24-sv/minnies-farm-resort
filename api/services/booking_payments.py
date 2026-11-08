@@ -2,6 +2,7 @@
 import base64
 import re
 from decimal import Decimal, InvalidOperation
+from pathlib import Path
 
 import requests
 from flask import jsonify, request
@@ -39,9 +40,13 @@ def payment_config(env):
         return value if re.fullmatch(r'/assets/images/[\w-]+\.(?:png|jpg|jpeg|webp)', value or '') else ''
 
     gcash_qr = qr_asset(env('PAYMENT_GCASH_QR_URL'))
+    # Enable the supplied QR automatically once the original asset is installed.
+    bundled_gcash_qr = Path(__file__).resolve().parents[2] / 'public/assets/images/gcash-qr.png'
+    if not gcash_qr and bundled_gcash_qr.is_file():
+        gcash_qr = '/assets/images/gcash-qr.png'
     if gcash_qr:
         accounts.append({'method': 'gcash', 'label': 'GCash',
-                         'name': env('PAYMENT_GCASH_NAME'), 'qr_url': gcash_qr})
+                         'name': 'MI*K DA***L M.', 'qr_url': gcash_qr})
     accounts.append({'method': 'bank_transfer', 'label': 'MariBank',
                      'name': 'MICK DANIEL MORALES',
                      'qr_url': '/assets/images/maribank-qr.png'})
