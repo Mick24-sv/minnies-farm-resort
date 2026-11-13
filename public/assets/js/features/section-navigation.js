@@ -40,6 +40,12 @@ window.createSectionNavigation = function (getPage, setSection) {
     layout();
   }
   return {
+    jump(target) {
+      const top = typeof target === 'number' ? target : Math.max(0, window.scrollY + target.getBoundingClientRect().top - window.innerHeight * .24);
+      lenis?.resize();
+      if (lenis) lenis.scrollTo(top, { immediate: true });
+      else window.scrollTo({ top, behavior: 'instant' });
+    },
     mount(element) {
       if (element === nav) return;
       mutation?.disconnect(); resize?.disconnect(); lenis?.destroy(); pillAnimation?.cancel(); cancelAnimationFrame(frame);
@@ -58,7 +64,7 @@ window.createSectionNavigation = function (getPage, setSection) {
     },
     go(name) {
       const target = document.getElementById('section-' + name);
-      const offset = -(nav?.offsetHeight || 64) - 16;
+      const offset = -(nav?.getBoundingClientRect().bottom || 64);
       lenis?.resize();
       if (target && lenis) lenis.scrollTo(target, { offset, duration: 1.1, easing: t => 1 - Math.pow(1 - t, 4), immediate: reduced.matches });
       else if (target) window.scrollTo({ top: Math.max(0, window.scrollY + target.getBoundingClientRect().top + offset), behavior: reduced.matches ? 'instant' : 'smooth' });

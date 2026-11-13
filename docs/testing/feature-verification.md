@@ -1,5 +1,7 @@
 # Added-feature verification
 
+Customer-selected arrival/departure times are covered by nine backend tests, the browser booking flow, and an isolated PostgreSQL migration check. The full backend suite now has 45 passing tests. See [booking times](../setup/booking-times.md) for coverage, limitations, and required live database activation. No live bookings or payments were created for these checks.
+
 Checked November 14, 2026 in headless Microsoft Edge against the local Flask server.
 
 After the file-structure reorganization on the same date, all 12 browser groups and four backend tests passed again. The structure check also confirmed 23 local HTML asset references, six feature scripts loaded before `app.js`, valid JavaScript syntax, and the relocated example path. Vercel's `public/` output and `api/index.py` entrypoint are unchanged.
@@ -8,13 +10,21 @@ After security hardening, the updated dependency stack passed 22 backend/profile
 
 ## Results
 
+Revenue correction: all sample SaaS/MRR/base/expansion/churn values were removed. The staff-only `/api/staff/revenue` endpoint aggregates recorded room and service payment ledgers into 12 Philippine-time months using centavo-safe arithmetic. The selected 3/6/12-month total is gross recorded receipts before refunds, excludes unpaid/unverified requests, and uses the receipt date rather than stay dates. Live read-only verification matched both actual ledgers. Thirty-six backend tests, 15 browser groups, and a reduced-motion CSS check passed. No financial records were changed.
+
+Room-rating correction: the sample rating card was removed from the staff dashboard and placed inside room details. Its average, review total and five star counts are read from the reviews API. Exact Supabase counts include all reviews even when the displayed review list is limited to 100. Live read-only checks matched stored reviews for all four rooms. Thirty backend tests and all 15 browser groups passed; UI edge cases use fixtures, while live verification used actual stored data.
+
+The Customer guide is now an icon-only help button in the header, including mobile/tablet layouts. Its five steps cover room dates and selection, the 50% deposit and 3-hour deadline, full-payment day services, My Bookings/payment status, and Profile settings/notifications. The guide highlights real controls, retains 640ms spotlight/card transitions, and restores the original page and scroll position on close. Browser checks cover signed-in guests on desktop/mobile and signed-out visitors with collapsed navigation.
+
+Profile settings are now inside My Bookings for guests (account sidebar → Profile settings), and inside the staff dashboard's Profile tab. The separate top-navigation Profile button was removed. The updated browser suite passes 15 groups, including desktop/mobile navigation, save/discard, mobile save-bar clearance for the merged view, and post-login overlays for email and simulated Google sign-in. APIs remain mocked during these browser checks.
+
 All 12 browser test groups passed, with no uncaught browser errors:
 
 | Feature | Verified |
 | --- | --- |
 | Libraries | Vue, GSAP, DrawSVG and Lenis load |
-| Staff revenue | Peso formatting; 3, 6 and 12 chart columns |
-| Rating card | Counts to 4.8; fifth star reaches 80%; five breakdown rows |
+| Staff revenue | Staff-only payment-ledger totals, PHP/centavos, 3/6/12-month ranges, loading/empty/error/retry states |
+| Room ratings | Per-room API averages and counts, dynamic fractional stars, loading/empty/error states and Retry |
 | Profile | Dirty save bar, Discard, failed save retains edits, successful save clears dirty state |
 | Payment confirmation | DrawSVG sequence mounts and completes; eight ticks; pulse fades |
 | Sticky navigation | Lenis reaches the section with header offset; active pill updates |
@@ -22,7 +32,7 @@ All 12 browser test groups passed, with no uncaught browser errors:
 | Footer | Reveals at scroll end; links become accessible; social hover and pressed states |
 | Mobile tabs | Tab navigation and indicator placement |
 | Pull to refresh | Touch gesture triggers a new booking fetch; pull panel resets |
-| Login | Successful email-login response triggers the logo animation before dashboard navigation |
+| Login | After successful sign-in, the destination page opens and a temporary logo-animation overlay appears; no animation mark is shown on the login form |
 | Separate session demo | Date/time selection, summary, delete dialog, outside click and cancel |
 
 Four Flask profile API tests also passed: authentication required; invalid/privileged fields rejected; only the authenticated user's name updated; failed database updates reported. All JavaScript files passed syntax checks.
@@ -46,7 +56,7 @@ Also checked November 14, 2026 using the existing `.env`, with no account change
 - Browser account, booking, service and payment responses were mocked. No database records were changed.
 - Profile API tests mocked database access. They exercise Flask routing, JWT authentication and validation, but do not prove a live Supabase write succeeds.
 - Successful interactive Google OAuth, actual payment workflows, email delivery and live profile writes still need integration checks using a sandbox or dedicated test account. The current user requested read-only checks on the live database.
-- Revenue and rating cards intentionally use sample data.
+- Both the revenue overview and room rating card now use actual Supabase data. Fixtures are used only in automated UI edge-case tests.
 - `examples/stillwell-booking/dist/index.html` is a separate demo. Its session booking and delete dialog are not part of the resort app and perform no real reservation or deletion.
 - Mobile checks used a narrow desktop viewport and simulated touch events. Physical-device behavior still needs checking.
 - Automated style and state checks do not replace a visual review of animation quality.

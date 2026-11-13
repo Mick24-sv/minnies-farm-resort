@@ -1,5 +1,15 @@
 # Transaction notifications
 
+## Five-month retention
+
+Applied `database/migrations/20261114_notification_retention.sql` to the connected Supabase project on November 14, 2026. Notifications expire after five calendar months, calculated in Philippine time. Expired items are excluded from every inbox page and unread count immediately on the next fetch, including unread items. A server-side pg_cron job named `resort_notification_retention` deletes expired notifications daily at 03:00 Philippine time (19:00 UTC), even when the site is closed. No frontend redeployment or environment flag is required.
+
+Only notification rows are deleted. Related delivery records retain their rows with a null notification reference; reservations, payments, and account records are preserved. Browser roles cannot call the purge function. The scheduled job was verified active, and the initial purge found no expired notifications.
+
+Run the isolated database test with `PGLITE_PATH` pointing to an installed `@electric-sql/pglite`, then `node tests/database/notification-retention.cjs`. It checks the exact cutoff, unread count, ownership, pagination, deletion, delivery preservation, and permissions. Cron scheduling is verified separately against Supabase.
+
+## Notification behavior
+
 Run `database/migrations/20261025_notifications.sql` in the Supabase SQL Editor after the booking payment, service payment, and service counter migrations. Restart Flask and refresh the browser. No new environment variables are needed.
 
 Signed-in staff and guests have a notification bell beside the navigation. The inbox shows an unread count, transaction details, dates in Philippine time, mark-read controls, and older updates. Opening an update opens that specific room reservation or service request, with the same ownership checks as the payment screens. It does not change a transaction's payment status.

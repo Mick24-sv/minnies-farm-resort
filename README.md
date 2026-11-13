@@ -4,6 +4,8 @@ Hi, I'm Mick — a full-stack developer focused on building practical web apps f
 
 This repository contains the **Minnie's Farm Resort** room booking website.
 
+Customer-selected arrival and departure times require the [booking-times database migration and activation](docs/setup/booking-times.md).
+
 - **Frontend:** Static HTML/CSS + Vue (loaded via `public/index.html`, logic in `public/assets/js/app.js`)
 - **Backend API:** Flask app deployed as a Vercel Serverless Function (`api/index.py`)
 - **Database:** Supabase (PostgREST)

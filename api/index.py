@@ -25,8 +25,12 @@ app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024
 try:
     from .security import install_security, allowed_origins
+    from .services.reviews import rating_summary
+    from .services.revenue import revenue_summary
 except ImportError:
     from security import install_security, allowed_origins
+    from services.reviews import rating_summary
+    from services.revenue import revenue_summary
 app.config['ALLOWED_ORIGINS'] = allowed_origins(os.getenv('FRONTEND_URL', ''), os.getenv('ALLOWED_ORIGINS', ''))
 CORS(app, resources={r'/api/*': {'origins': app.config['ALLOWED_ORIGINS']}},
      allow_headers=['Authorization', 'Content-Type', 'Cache-Control', 'Pragma'],
@@ -547,34 +551,40 @@ def handle_reviews():
         endpoints_to_try.append('reviews?select=*&order=created_at.desc')
         endpoints_to_try.append('reviews?select=*')
 
-        rows = []
+        rows = None
         last_err = None
         for base in endpoints_to_try:
             endpoint = base + '&limit=100'
             if room_id:
                 endpoint += f'&room_id=eq.{room_id}'
             try:
-                rows = supabase_req(endpoint) or []
-                last_err = None
-                break
+                result = supabase_req(endpoint)
+                if isinstance(result, list):
+                    rows = result
+                    last_err = None
+                    break
             except Exception as e:
                 last_err = e
-                rows = []
+                rows = None
 
         if last_err is not None:
             app.logger.warning("Review lookup failed (%s)", type(last_err).__name__)
 
+        if rows is None:
+            return jsonify(error='Reviews are temporarily unavailable. Please retry.'), 503
+        try:
+            summary = rating_summary(SUPABASE_URL, SUPABASE_KEY, room_id)
+        except Exception:
+            return jsonify(error='Review counts are temporarily unavailable. Please retry.'), 503
         formatted = []
-        total = 0
-        sum_rating = 0
         for r in rows if isinstance(rows, list) else []:
             rating_val = r.get('rating')
             try:
                 rating_num = float(rating_val) if rating_val is not None else 0
             except Exception:
                 rating_num = 0
-            sum_rating += rating_num
-            total += 1
+            if rating_num not in (1, 2, 3, 4, 5):
+                continue
 
             user_info = r.get('users', {})
             guest_name = None
@@ -590,12 +600,9 @@ def handle_reviews():
                 'review': r.get('review') or r.get('comment') or ''
             })
 
-        avg = round((sum_rating / total), 2) if total else 0
-
         return jsonify({
             "reviews": formatted,
-            "average_rating": avg,
-            "total_reviews": total
+            **summary
         }), 200
     except Exception as e:
         return internal_error(e)
@@ -603,6 +610,19 @@ def handle_reviews():
 @app.route('/api/auth/logout', methods=['POST'])
 def logout():
     return jsonify({"message": "Logged out"}), 200
+
+
+@app.get('/api/staff/revenue')
+def staff_revenue():
+    user = _get_user_from_request()
+    if not user:
+        return jsonify(error='Please sign in.'), 401
+    if user.get('role') != 'staff':
+        return jsonify(error='Staff access required.'), 403
+    try:
+        return jsonify(revenue_summary(supabase_req))
+    except Exception:
+        return jsonify(error='Revenue data is temporarily unavailable. Please retry.'), 503
 
 @app.route('/api/auth/me', methods=['GET'])
 @jwt_required()

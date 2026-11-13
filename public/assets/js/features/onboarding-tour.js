@@ -1,18 +1,19 @@
-window.createOnboardingTour = function () {
-  let dialog, spotlight, card, index = 0, returnFocus, overflow, frame;
+window.createOnboardingTour = function ({ prepare = async () => {}, reveal = element => element.scrollIntoView({ block: 'center', behavior: 'instant' }), onStart = () => {}, onFinish = async () => {} } = {}) {
+  let dialog, spotlight, card, index = 0, returnFocus, overflow, frame, version = 0, preparing = false;
   const steps = [
-    { title: 'Welcome to the farm.', text: 'Your next getaway starts here. The resort logo always brings you back to the top.', targets: ['.nav-brand'] },
-    { title: 'Find your kind of stay.', text: 'Browse rooms, compare details, and choose the space that feels right for you.', targets: ['#main-navigation [data-section="rooms"]', '.mobile-bottom-tabs button:nth-of-type(2)'] },
-    { title: 'Make a day of it.', text: 'Explore day visits and resort services for a little escape, even without an overnight stay.', targets: ['#main-navigation [data-section="services"]', '.mobile-bottom-tabs button:nth-of-type(3)'] },
-    { title: 'Everything in one place.', text: 'Sign in to manage your bookings. Staff can open their dashboard, and signed-in guests can update their profile.', targets: ['#main-navigation [data-section="profile"]', '#main-navigation .nav-btn-primary', '.mobile-bottom-tabs button:nth-of-type(4)'] },
+    { view: 'rooms', title: 'Plan your visit.', text: 'Choose your check-in and check-out dates, guest count, and budget in pesos. Compare rooms, then open View room to see photos, availability, and the total.', targets: ['#rooms-check-in'] },
+    { view: 'rooms', title: 'Reserve your stay.', text: 'Sign in before reserving. A room is held for 3 hours while you pay the 50% deposit through the available GCash or MariBank QR. Submit your reference; the booking is confirmed only after staff verify the funds.', targets: ['.room-details-button:not(:disabled)', '#room-filter-heading'] },
+    { view: 'services', title: 'Just visiting for the day?', text: 'Choose a day service or package here. Services require full payment, online or at the resort counter, before use. No room booking is required. A screenshot or payment choice alone does not mark a request paid.', targets: ['.service-request-button:not(:disabled)', '#services-hero-heading'] },
+    { view: 'account', title: 'Track your bookings.', text: 'Open My Bookings to see upcoming and past stays, service requests, payment instructions, and balances. Check whether your reservation is pending or confirmed, and use the payment details to submit your reference.', targets: ['.guest-tabs', '#main-navigation [data-section="dashboard"]', '#main-navigation .nav-btn-primary', '.mobile-bottom-tabs button:nth-of-type(4)', '.mobile-menu-btn'] },
+    { view: 'account', title: 'Keep your details up to date.', text: 'Inside My Bookings, choose Profile settings to update your name, then Save or Discard. The notification bell shows reservation and payment updates. If you are not signed in yet, start with Account or Sign in.', targets: ['.guest-account-nav button:nth-of-type(2)', '#main-navigation [data-section="dashboard"]', '#main-navigation .nav-btn-primary', '.mobile-bottom-tabs button:nth-of-type(4)', '.mobile-menu-btn'] },
   ];
   function targetFor(step) {
     return step.targets.map(selector => document.querySelector(selector)).find(node => node && node.getClientRects().length && getComputedStyle(node).visibility !== 'hidden');
   }
   function position() {
-    if (!dialog?.open) return;
+    if (!dialog?.open || preparing) return;
     const target = targetFor(steps[index]);
-    if (!target) { dialog.close(); return; }
+    if (!target) return;
     const bounds = target.getBoundingClientRect(), width = window.innerWidth, height = window.innerHeight;
     const x = Math.max(6, bounds.left - 8), y = Math.max(6, bounds.top - 8);
     const w = Math.min(width - x - 6, bounds.width + 16), h = Math.min(height - y - 6, bounds.height + 16);
@@ -25,36 +26,49 @@ window.createOnboardingTour = function () {
     card.dataset.placement = top < y ? 'above' : 'below';
   }
   function schedule() { cancelAnimationFrame(frame); frame = requestAnimationFrame(position); }
-  function render() {
+  async function render() {
+    const revision = ++version;
+    preparing = true;
     const step = steps[index];
+    dialog.querySelector('[data-next]').disabled = true;
+    dialog.querySelector('[data-back]').disabled = true;
+    await prepare(step);
+    if (!dialog?.open || revision !== version) return;
+    preparing = false;
     dialog.querySelector('#tour-title').textContent = step.title;
     dialog.querySelector('#tour-description').textContent = step.text;
     dialog.querySelector('.tour-progress').textContent = 'QUICK TOUR · ' + (index + 1) + ' OF ' + steps.length;
     dialog.querySelector('[data-back]').disabled = index === 0;
+    dialog.querySelector('[data-next]').disabled = false;
     dialog.querySelector('[data-next]').textContent = index === steps.length - 1 ? 'All set ✓' : 'Next →';
     dialog.querySelectorAll('.tour-dot').forEach((dot, n) => dot.classList.toggle('active', n === index));
+    const target = targetFor(step);
+    if (target) reveal(target);
     position();
+    if (dialog) dialog.querySelector('.tour-announcement').textContent = 'Step ' + (index + 1) + ' of ' + steps.length + '. ' + step.title + ' ' + step.text;
   }
   function cleanup() {
+    version++; preparing = false;
     window.removeEventListener('resize', schedule); window.removeEventListener('scroll', schedule);
     cancelAnimationFrame(frame); document.body.style.overflow = overflow;
     dialog?.remove(); dialog = null;
-    if (returnFocus?.isConnected) returnFocus.focus({ preventScroll: true });
+    Promise.resolve(onFinish()).then(() => { if (returnFocus?.isConnected) returnFocus.focus({ preventScroll: true }); });
   }
   return function startTour() {
     if (dialog?.open) return;
+    onStart();
     returnFocus = document.activeElement; overflow = document.body.style.overflow;
     index = 0;
     dialog = document.createElement('dialog'); dialog.className = 'onboarding-tour';
     dialog.setAttribute('data-lenis-prevent', '');
     dialog.setAttribute('aria-labelledby', 'tour-title'); dialog.setAttribute('aria-describedby', 'tour-description');
-    dialog.innerHTML = '<div class="tour-spotlight" aria-hidden="true"></div><section class="tour-card"><div class="tour-card-top"><span class="tour-progress"></span><button type="button" class="tour-skip" data-skip>Skip tour</button></div><h2 id="tour-title"></h2><p id="tour-description"></p><div class="tour-card-bottom"><div class="tour-dots" aria-hidden="true"><i class="tour-dot"></i><i class="tour-dot"></i><i class="tour-dot"></i><i class="tour-dot"></i></div><div class="tour-actions"><button type="button" class="tour-back" data-back>Back</button><button type="button" class="tour-next" data-next>Next →</button></div></div><span class="tour-announcement" role="status" aria-live="polite"></span></section>';
+    dialog.innerHTML = '<div class="tour-spotlight" aria-hidden="true"></div><section class="tour-card"><div class="tour-card-top"><span class="tour-progress"></span><button type="button" class="tour-skip" data-skip>Skip tour</button></div><h2 id="tour-title"></h2><p id="tour-description"></p><div class="tour-card-bottom"><div class="tour-dots" aria-hidden="true"></div><div class="tour-actions"><button type="button" class="tour-back" data-back>Back</button><button type="button" class="tour-next" data-next>Next →</button></div></div><span class="tour-announcement" role="status" aria-live="polite"></span></section>';
     document.body.append(dialog); spotlight = dialog.querySelector('.tour-spotlight'); card = dialog.querySelector('.tour-card');
+    dialog.querySelector('.tour-dots').innerHTML = steps.map(() => '<i class="tour-dot"></i>').join('');
     dialog.addEventListener('close', cleanup, { once: true });
     dialog.querySelector('[data-skip]').onclick = () => dialog.close();
-    dialog.querySelector('[data-back]').onclick = () => { if (index > 0) { index--; render(); announce(); } };
-    dialog.querySelector('[data-next]').onclick = () => { if (index === steps.length - 1) dialog.close(); else { index++; render(); announce(); } };
-    function announce() { dialog.querySelector('.tour-announcement').textContent = 'Step ' + (index + 1) + ' of ' + steps.length + '. ' + steps[index].title + ' ' + steps[index].text; }
+    dialog.querySelector('[data-back]').onclick = () => { if (index > 0) { index--; render(); } };
+    dialog.querySelector('[data-next]').onclick = () => { if (index === steps.length - 1) dialog.close(); else { index++; render(); } };
     dialog.addEventListener('wheel', event => event.preventDefault(), { passive: false });
     dialog.addEventListener('touchmove', event => event.preventDefault(), { passive: false });
     dialog.addEventListener('keydown', event => {
@@ -64,9 +78,12 @@ window.createOnboardingTour = function () {
       if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
       else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
     });
-    document.body.style.overflow = 'hidden'; dialog.showModal(); render();
-    dialog.querySelector('[data-next]').focus();
-    frame = requestAnimationFrame(() => { if (dialog) dialog.classList.add('is-moving'); });
+    document.body.style.overflow = 'hidden'; dialog.showModal();
+    render().then(() => {
+      if (!dialog) return;
+      dialog.querySelector('[data-next]').focus();
+      frame = requestAnimationFrame(() => { if (dialog) dialog.classList.add('is-moving'); });
+    });
     window.addEventListener('resize', schedule); window.addEventListener('scroll', schedule, { passive: true });
   };
 };

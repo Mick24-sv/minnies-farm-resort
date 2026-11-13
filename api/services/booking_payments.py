@@ -6,6 +6,10 @@ from pathlib import Path
 
 import requests
 from flask import jsonify, request
+try:
+    from .booking_times import validate_booking_times
+except ImportError:
+    from booking_times import validate_booking_times
 
 
 class BookingError(Exception):
@@ -18,7 +22,7 @@ ERRORS = {
     'BOOKING_UNAUTHORIZED': ('Please sign in again.', 401),
     'BOOKING_FORBIDDEN': ('You do not have access to this action.', 403),
     'BOOKING_NOT_FOUND': ('The room or reservation could not be found.', 404),
-    'BOOKING_ROOM_UNAVAILABLE': ('This room is not available for those dates or guest count.', 409),
+    'BOOKING_ROOM_UNAVAILABLE': ('This room is not available for those dates, times, or guest count.', 409),
     'BOOKING_PAYMENT_CLOSED': ('This reservation is no longer accepting payment submissions.', 409),
     'BOOKING_DEPOSIT_TOO_SMALL': ('Record the full required deposit before confirming this reservation.', 409),
     'BOOKING_BALANCE_DUE': ('Collect the outstanding balance before completing this stay.', 409),
@@ -128,7 +132,7 @@ def install_booking_routes(app, query, get_user, env):
 
     @app.get('/api/payment-options')
     def get_payment_options():
-        return jsonify(payment_config(env))
+        return jsonify({**payment_config(env), 'booking_times_enabled': env('BOOKING_TIMES_ENABLED') == '1'})
 
     @app.route('/api/bookings', methods=['GET', 'POST'])
     @handled
@@ -138,6 +142,8 @@ def install_booking_routes(app, query, get_user, env):
             rpc('resort_expire_holds')
             # Keep proof images out of list responses (including large staff lists).
             fields = 'id,user_id,room_id,check_in,check_out,guest_count,total_price,status,created_at,booking_source,walk_in_guest_name,guest_phone,deposit_required,amount_paid,payment_status,payment_due_at,payment_review_status,submitted_payment_method,submitted_payment_reference,payment_submitted_at,payment_review_note'
+            if env('BOOKING_TIMES_ENABLED') == '1':
+                fields += ',check_in_time,check_out_time'
             endpoint = f'bookings?select={fields}&order=created_at.desc'
             if user.get('role') != 'staff':
                 endpoint += f'&user_id=eq.{int(user["id"])}'
@@ -153,7 +159,15 @@ def install_booking_routes(app, query, get_user, env):
             raise BookingError('Invalid booking source.')
         elif not payment_config(env)['configured']:
             raise BookingError('Online deposit booking is not set up yet. Please contact the resort.', 503)
-        result = rpc('resort_create_booking', {
+        times_enabled = env('BOOKING_TIMES_ENABLED') == '1'
+        if not times_enabled and (data.get('check_in_time') or data.get('check_out_time')):
+            raise BookingError('Time selection is temporarily unavailable. Please contact the resort.', 503)
+        if times_enabled:
+            try:
+                arrival, departure = validate_booking_times(data, source)
+            except ValueError as error:
+                raise BookingError(str(error)) from None
+        payload = {
             'p_actor_id': int(user['id']), 'p_room_id': int(data['room_id']),
             'p_check_in': data['check_in_date'], 'p_check_out': data['check_out_date'],
             'p_guests': int(data['num_guests']), 'p_source': source,
@@ -162,7 +176,12 @@ def install_booking_routes(app, query, get_user, env):
             'p_request_key': data.get('request_key'),
             'p_method': data.get('payment_method'), 'p_reference': str(data.get('payment_reference') or '')[:120],
             'p_expected_total': data.get('expected_total'),
-        })
+        }
+        if times_enabled:
+            payload.update(p_check_in_time=arrival, p_check_out_time=departure)
+            result = rpc('resort_create_booking_with_times', {'p_payload': payload})
+        else:
+            result = rpc('resort_create_booking', payload)
         return jsonify({'booking': decorate_booking(result), 'message': 'Reservation created.'}), 201
 
     @app.get('/api/bookings/<int:booking_id>')

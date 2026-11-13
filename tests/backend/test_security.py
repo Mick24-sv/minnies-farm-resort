@@ -131,7 +131,8 @@ class SecurityTest(unittest.TestCase):
         self.assertEqual(response.status_code, 403)
         db.side_effect = None
         db.return_value = [{'id': 1, 'room_id': 1, 'rating': 5, 'user_id': 7, 'booking_id': 9, 'users': {'name': 'QA', 'email': 'private@example.com'}, 'private_note': 'private'}]
-        response = self.client.get('/api/reviews?room_id=1')
+        with patch('api.index.rating_summary', return_value={'average_rating': 5, 'total_reviews': 1, 'rating_breakdown': {'5': 1, '4': 0, '3': 0, '2': 0, '1': 0}}):
+            response = self.client.get('/api/reviews?room_id=1')
         self.assertEqual(response.status_code, 200)
         for key in ['user_id', 'booking_id', 'users', 'private_note']:
             self.assertNotIn(key, response.json['reviews'][0])

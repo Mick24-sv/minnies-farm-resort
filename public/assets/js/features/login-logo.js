@@ -11,7 +11,10 @@ window.createLoginLogo = function () {
     },
     play() {
       stop();
-      if (!element || !window.gsap || !window.DrawSVGPlugin || preference.matches) return Promise.resolve();
+      if (!element) return Promise.resolve();
+      if (!window.gsap || !window.DrawSVGPlugin || preference.matches) {
+        return new Promise(resolve => setTimeout(resolve, 1200));
+      }
       window.gsap.registerPlugin(window.DrawSVGPlugin);
       return new Promise(resolve => {
         complete = resolve;
@@ -23,7 +26,8 @@ window.createLoginLogo = function () {
           window.gsap.timeline({ onComplete: () => { complete = null; resolve(); } })
             .to(outline, { drawSVG: '0% 100%', duration: 1.2, ease: 'power1.inOut' })
             .to(flood, { clipPath: 'inset(0% 0% 0% 0%)', duration: 0.48, ease: 'power2.inOut' })
-            .to(outline, { drawSVG: '100% 100%', duration: 0.42, ease: 'power2.in' });
+            .to(outline, { drawSVG: '100% 100%', duration: 0.42, ease: 'power2.in' })
+            .to({}, { duration: 1.2 });
         }, element);
       });
     },

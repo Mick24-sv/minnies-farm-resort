@@ -2,6 +2,8 @@
 
 These are local source changes. They protect the hosted application only after deployment. No live accounts, payments, environment secrets, or database privileges were changed.
 
+That statement describes the initial hardening review. A later [explicitly authorized repair](account-repair.md) converted two legacy password fields to hashes and verified real staff/guest login. No database-permission SQL has been applied.
+
 ## Implemented
 
 - Removed plaintext-password authentication fallback. Accounts containing plaintext passwords must use password reset; their plaintext value will no longer authenticate.

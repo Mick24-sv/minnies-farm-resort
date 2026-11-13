@@ -1,7 +1,10 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+.detail-booking-times{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:16px 0}.detail-booking-times label{display:block;font-size:11px;color:#6a795a;margin-bottom:8px}.detail-booking-times input{display:block;width:100%;min-width:0;padding:12px 10px;border:1px solid #d7dfcb;border-radius:6px;background:#f6f8f1;color:#30492f;font:400 13px 'DM Sans',sans-serif;min-height:44px}.detail-booking-times input:disabled{opacity:.5;cursor:not-allowed}.detail-booking-times input:focus-visible{outline:2px solid #9bb57b;outline-offset:2px}.booking-selected-time{display:block;margin-top:5px;font-size:11px;font-weight:400;color:#7c8b6d;line-height:1.5}
 
     /* Keep account notifications immediately before the sign-out action. */
     .nav-account-actions { display: flex; align-items: center; gap: 12px; margin-left: 8px; }
+    .nav-account-actions > .nav-btn-primary { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; margin-left: 0; }
+    .nav-account-actions > .tour-launch-desktop { width: 44px; height: 44px; }
     .notification-control { position: relative; flex-shrink: 0; }
     .notification-control-mobile { display: none; }
     nav > .nav-links { order: 1; margin-left: auto; }
@@ -142,17 +145,16 @@
       margin-left: 0.5rem;
     }
     .nav-btn-primary:hover { background: var(--gold-light); color: var(--deep); }
-    .nav-role-badge {
-      font-size: 0.7rem;
-      padding: 0.2rem 0.6rem;
-      border-radius: 20px;
-      background: rgba(201,168,76,0.2);
-      color: var(--gold);
-      border: 1px solid rgba(201,168,76,0.4);
-      margin-right: 0.5rem;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-    }
+    .nav-account-button { display: inline-flex; align-items: center; gap: 8px; }
+    .nav-account-button svg { flex-shrink: 0; }
+    .about-photo-fallback { display: none; }
+    .about-photo-unavailable > img { display: none; }
+    .about-img-block.about-photo-unavailable { display: grid; place-items: center; }
+    .about-photo-unavailable > .about-photo-fallback { display: block; padding: 24px; text-align: center; color: #62715b; font-size: 14px; }
+    .ui-icon { display: inline-block; flex-shrink: 0; vertical-align: -3px; pointer-events: none; }
+    .nav-btn > .ui-icon, .profile-save-button > .ui-icon, .profile-discard > .ui-icon, .detail-review-submit > .ui-icon { margin-right: 7px; }
+    .guest-account-nav button:has(> .ui-icon) { justify-content: flex-start; }
+    .guest-account-nav button > span[aria-hidden] { margin-left: auto; }
 
     /* ── PAGE WRAPPER ── */
     @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }

@@ -5,18 +5,51 @@ const API_URL = window.location.hostname === 'localhost' || window.location.host
   : '/api';
 
 const __app = createApp({
+  components: {
+    ProfileSettings: {
+      template: '#profile-settings-template',
+      props: ['currentUser', 'profileForm', 'profileSaving', 'profileDirty', 'profileError', 'profileMessage'],
+      emits: ['save', 'discard'],
+    },
+  },
   setup() {
     const loginLogo = window.createLoginLogo();
     const setLoginLogo = loginLogo.mount;
+    const loginSuccessVisible = ref(false);
+    function setLoginSuccessDialog(element) {
+      if (element && !element.open) element.showModal();
+    }
     async function finishLoginMotion(user) {
-      await nextTick();
-      await loginLogo.play();
-      if (page.value === 'auth') navigate(user.role === 'staff' ? 'dashboard' : 'rooms');
+      if (page.value !== 'auth') return;
+      navigate(user.role === 'staff' ? 'dashboard' : 'rooms');
+      loginSuccessVisible.value = true;
+      try {
+        await nextTick();
+        await loginLogo.play();
+      } finally {
+        loginSuccessVisible.value = false;
+      }
     }
     const setLiquidTabs = window.createLiquidTabs();
     const setPaymentSuccessIcon = window.createPaymentSuccessMotion();
     const page = ref('home');
-    const beginOnboardingTour = window.createOnboardingTour();
+    let tourReturnState = null;
+    const beginOnboardingTour = window.createOnboardingTour({
+      onStart() { tourReturnState = { page: page.value, account: accountSection.value, scroll: window.scrollY }; },
+      async prepare(step) {
+        if (step.view === 'account') {
+          if (currentUser.value?.role === 'guest') { page.value = 'dashboard'; accountSection.value = 'bookings'; }
+        } else page.value = step.view;
+        await nextTick();
+      },
+      reveal(element) { sectionNavigation.jump(element); },
+      async onFinish() {
+        if (!tourReturnState) return;
+        const saved = tourReturnState; tourReturnState = null;
+        page.value = saved.page; accountSection.value = saved.account;
+        await nextTick(); sectionNavigation.jump(saved.scroll);
+      },
+    });
     async function startOnboardingTour() {
       mobileMenuOpen.value = false; notificationsOpen.value = false;
       await nextTick(); beginOnboardingTour();
@@ -49,6 +82,7 @@ const __app = createApp({
     const setSectionNavigation = sectionNavigation.mount;
     const authTab = ref('login');
     const dashTab = ref('upcoming');
+    const accountSection = ref('bookings');
 
     // Tokens persist only in this tab. Remove the previous long-lived storage entry.
     try { localStorage.removeItem('token'); } catch (e) {}
@@ -122,7 +156,7 @@ const __app = createApp({
         notificationUnread.value = Number(data.unread_count || 0);
         if (older || previous.length <= 50) notificationsOlder.value = items.length === 50;
         if (changed && page.value === 'dashboard' && !showPaymentDialog.value) {
-          if (currentUser.value.role === 'staff') fetchAllBookings(); else fetchUserBookings();
+          if (currentUser.value.role === 'staff') { fetchAllBookings(); fetchRevenue(); } else fetchUserBookings();
           fetchServiceAvails();
         }
       } catch (error) {
@@ -284,8 +318,9 @@ const __app = createApp({
     }
     const staffTab = ref('bookings');
     const ratingProgress = ref(0);
-    const ratingRows = [{stars:5,count:850},{stars:4,count:115},{stars:3,count:25},{stars:2,count:5},{stars:1,count:5}];
-    const ratingAverage = computed(() => (4.8 * ratingProgress.value).toFixed(1));
+    const ratingValue = computed(() => Math.round(Number(reviewsAvg.value) * 10) / 10);
+    const ratingRows = computed(() => [5,4,3,2,1].map(stars => ({ stars, count: reviewBreakdown.value[stars] || 0, percent: reviewsTotal.value ? (reviewBreakdown.value[stars] || 0) / reviewsTotal.value * 100 : 0 })));
+    const ratingAverage = computed(() => (ratingValue.value * ratingProgress.value).toFixed(1));
     let ratingElement = null, ratingObserver = null, ratingFrame = 0;
     function animateRating() {
       cancelAnimationFrame(ratingFrame);
@@ -313,22 +348,45 @@ const __app = createApp({
       ratingObserver.observe(element);
     }
     const revenueRange = ref(6);
-    // Sample subscription metrics, unrelated to resort receipts.
-    const revenueHistory = [[72000,6000,2600],[75400,7200,3100],[79500,6500,2400],[83600,8200,3300],[88500,7600,2900],[93200,9100,3500],[98800,8500,3200],[104100,10600,3900],[110800,9800,3400],[117200,11200,4100],[124300,12500,4600],[132200,14800,4200]];
-    const revenueMonths = computed(() => {
-      const current = new Date(new Date().toLocaleDateString('en-US', { timeZone: 'Asia/Manila' }));
-      return revenueHistory.map(([base, expansion, churn], index) => {
-        const date = new Date(current.getFullYear(), current.getMonth() - 11 + index, 1);
-        return { base, expansion, churn, net: base + expansion - churn,
-          label: date.toLocaleDateString('en-US', { month: 'short' }),
-          fullLabel: date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) };
-      });
-    });
+    const revenueData = ref([]), revenueAsOf = ref('');
+    const revenueLoading = ref(false), revenueError = ref('');
+    let revenueRequest = 0, revenueController = null;
+    const revenueMonths = computed(() => revenueData.value.map(row => {
+      const [year, month] = row.month.split('-').map(Number), date = new Date(year, month - 1, 1);
+      return { ...row, label: date.toLocaleDateString('en-PH', { month: 'short' }), fullLabel: date.toLocaleDateString('en-PH', { month: 'long', year: 'numeric' }) };
+    }));
     const revenueVisible = computed(() => revenueMonths.value.slice(-revenueRange.value));
     const revenueLatest = computed(() => revenueMonths.value.at(-1));
-    const revenueGrowth = computed(() => ((revenueMonths.value.at(-1).net / revenueMonths.value.at(-2).net - 1) * 100).toFixed(1));
-    const revenueScale = computed(() => Math.ceil(Math.max(...revenueVisible.value.map(row => row.base + row.expansion)) / 40000) * 40000);
-    const revenueMoney = value => new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', maximumFractionDigits: 0 }).format(value);
+    const revenueTotal = computed(() => revenueVisible.value.reduce((sum, row) => sum + Math.round(row.total * 100), 0) / 100);
+    const revenueScale = computed(() => {
+      const maximum = Math.max(0, ...revenueVisible.value.map(row => row.total));
+      if (!maximum) return 1;
+      const unit = Math.pow(10, Math.floor(Math.log10(maximum)));
+      return Math.ceil(maximum / unit) * unit;
+    });
+    const revenueMoney = value => new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
+    const revenueAxisMoney = value => new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', notation: 'compact', minimumFractionDigits: 0, maximumFractionDigits: 1 }).format(value);
+    const revenueUpdated = computed(() => revenueAsOf.value ? new Date(revenueAsOf.value).toLocaleString('en-PH', { timeZone: 'Asia/Manila', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '');
+    async function fetchRevenue() {
+      if (currentUser.value?.role !== 'staff') return;
+      const sequence = ++revenueRequest, session = token.value;
+      revenueController?.abort(); revenueController = new AbortController();
+      revenueLoading.value = true; revenueError.value = '';
+      try {
+        const response = await fetch(API_URL + '/staff/revenue', { headers: { Authorization: 'Bearer ' + session }, signal: revenueController.signal, cache: 'no-store' });
+        if (!response.ok) throw new Error('Could not load recorded payments. Please retry.');
+        const data = await response.json();
+        if (sequence !== revenueRequest || session !== token.value || currentUser.value?.role !== 'staff') return;
+        if (data.currency !== 'PHP' || !Array.isArray(data.months) || data.months.length !== 12 || !data.months.every(row => /^\d{4}-\d{2}$/.test(row.month) && [row.room_payments,row.service_payments,row.total].every(n => typeof n === 'number' && Number.isFinite(n) && n >= 0) && Math.abs(row.total-row.room_payments-row.service_payments)<0.001)) throw new Error('Revenue summary unavailable. Please retry.');
+        revenueData.value = data.months; revenueAsOf.value = data.as_of;
+      } catch (error) { if (sequence === revenueRequest && error.name !== 'AbortError') revenueError.value = error.message; }
+      finally { if (sequence === revenueRequest) revenueLoading.value = false; }
+    }
+    watch(() => [page.value, currentUser.value?.id, currentUser.value?.role], () => {
+      if (currentUser.value?.role !== 'staff') {
+        ++revenueRequest; revenueController?.abort(); revenueData.value = []; revenueAsOf.value = ''; revenueError.value = ''; revenueLoading.value = false;
+      } else if (page.value === 'dashboard') fetchRevenue();
+    });
     const staffBookingSearch = ref('');
     const staffBookingStatus = ref('');
     const staffRefreshing = ref(false);
@@ -350,6 +408,11 @@ const __app = createApp({
       const date = new Date(String(value).slice(0, 10) + 'T12:00:00');
       return Number.isNaN(date.getTime()) ? '—' : date.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
     }
+    function formatGuestTime(value) {
+      if (typeof value !== 'string' || !/^(?:[01]\d|2[0-3]):[0-5]\d(?::00)?$/.test(value)) return 'Time not specified';
+      const [hours, minutes] = value.split(':').map(Number);
+      return new Date(Date.UTC(2000,0,1,hours,minutes)).toLocaleTimeString('en-PH', {timeZone:'UTC',hour:'numeric',minute:'2-digit'}) + ' PHT';
+    }
     const filteredStaffBookings = computed(() => {
       const query = staffBookingSearch.value.trim().toLowerCase();
       return allBookings.value.filter(b =>
@@ -363,7 +426,7 @@ const __app = createApp({
       staffRefreshing.value = true;
       try {
         await fetchRooms();
-        await Promise.all([fetchAllBookings(), fetchServices(), fetchServiceAvails()]);
+        await Promise.all([fetchAllBookings(), fetchServices(), fetchServiceAvails(), fetchRevenue()]);
       } finally {
         staffRefreshing.value = false;
       }
@@ -411,7 +474,15 @@ const __app = createApp({
       if (Math.abs(dx) >= 50 && Math.abs(dx) > Math.abs(dy) * 1.3) changeRoomPhoto(dx < 0 ? 1 : -1);
     }
     function cancelRoomPhotoGesture() { roomPhotoGesture = null; }
-    const bookingForm = ref({ checkIn: '', checkOut: '', guests: 1 });
+    const bookingForm = ref({ checkIn: '', checkOut: '', checkInTime: '', checkOutTime: '', guests: 1 });
+    const bookingTimesValid = computed(() => {
+      if (!paymentOptions.value.booking_times_enabled) return true;
+      const values = bookingForm.value;
+      if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(values.checkInTime) || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(values.checkOutTime)) return false;
+      const arrival = Date.parse(values.checkIn + 'T' + values.checkInTime + ':00+08:00');
+      const departure = Date.parse(values.checkOut + 'T' + values.checkOutTime + ':00+08:00');
+      return Number.isFinite(arrival) && Number.isFinite(departure) && arrival > Date.now() && departure > arrival;
+    });
     const roomForm = ref({
       room_number: '', name: '', type: 'Standard', capacity: 2, price_per_night: '',
       description: '', sqm: '', amenities: '', image_url: '', image_url_2: '', image_url_3: '',
@@ -435,7 +506,7 @@ const __app = createApp({
     const paymentError = ref('');
     const paymentPhotoReading = ref(false);
     const paymentForm = ref({ method: 'gcash', reference: '', proof: '', amount: '', verified: false, note: '' });
-    const walkInForm = ref({ room_id: '', guest_name: '', guest_phone: '', check_in_date: '', check_out_date: '', num_guests: 1, payment_method: 'cash', payment_reference: '', payment_received: false });
+    const walkInForm = ref({ room_id: '', guest_name: '', guest_phone: '', check_in_date: '', check_out_date: '', check_in_time: '', check_out_time: '', num_guests: 1, payment_method: 'cash', payment_reference: '', payment_received: false });
     const walkInRoom = computed(() => (walkInKind.value === 'service' ? services.value : rooms.value).find(room => String(room.id) === String(walkInForm.value.room_id)));
     const walkInTotal = computed(() => {
       if (walkInKind.value === 'service') return walkInRoom.value ? Math.round(Number(walkInRoom.value.price) * Number(walkInForm.value.num_guests) * 100) / 100 : 0;
@@ -562,6 +633,7 @@ const __app = createApp({
           if (lastBooking.value.id === data.booking.id) lastBooking.value = bookingReceipt(data.booking);
           if (staff) await fetchAllBookings(); else await fetchUserBookings();
         }
+        if (staff) await fetchRevenue();
         const counterChoice = !staff && paymentKind.value === 'service' && path === 'pay-at-counter';
         showPaymentDialog.value = false;
         if (counterChoice) {
@@ -578,7 +650,7 @@ const __app = createApp({
     async function openWalkInDialog(kind = 'booking') {
       walkInKind.value = kind;
       paymentError.value = ''; if (kind === 'service') await fetchServices(); else await fetchRooms();
-      walkInForm.value = { room_id: '', guest_name: '', guest_phone: '', check_in_date: today, check_out_date: '', num_guests: 1, payment_method: 'cash', payment_reference: '', payment_received: false };
+      walkInForm.value = { room_id: '', guest_name: '', guest_phone: '', check_in_date: today, check_out_date: '', check_in_time: '', check_out_time: '', num_guests: 1, payment_method: 'cash', payment_reference: '', payment_received: false };
       showWalkInDialog.value = true;
     }
     async function saveWalkIn() {
@@ -588,6 +660,7 @@ const __app = createApp({
       body.request_key = requestKey(walkInKind.value + '-walk-in', body);
       try {
         const data = await paymentApi(walkInKind.value === 'service' ? '/services/avails/walk-in' : '/bookings', body);
+        await fetchRevenue();
         if (walkInKind.value === 'service') {
           showWalkInDialog.value = false; staffTab.value = 'services';
           await fetchServiceAvails(); await fetchServices();
@@ -766,6 +839,9 @@ const __app = createApp({
     const reviews = ref([]);
     const reviewsAvg = ref(0);
     const reviewsTotal = ref(0);
+    const reviewBreakdown = ref({});
+    const reviewsLoading = ref(false), reviewsError = ref('');
+    let reviewController = null, reviewRequest = 0;
     const reviewForm = ref({ rating: 0, review: '' });
     const reviewHover = ref(0);
 
@@ -883,6 +959,13 @@ const __app = createApp({
     }
 
     function navigate(p) {
+      const openProfile = p === 'profile';
+      if (openProfile) p = 'dashboard';
+      if (p === 'dashboard') {
+        accountSection.value = openProfile ? 'profile' : 'bookings';
+        if (openProfile) staffTab.value = 'profile';
+        else if (staffTab.value === 'profile') staffTab.value = 'bookings';
+      }
       const wasBrowsing = browsingSections.value;
       page.value = p;
       mobileMenuOpen.value = false; // Close mobile menu on navigation
@@ -953,7 +1036,6 @@ const __app = createApp({
             currentUser.value = data.user;
             authMsg.value = '✅ Logged in with Google!';
             authMsgType.value = 'success';
-            showToast(`Welcome, ${data.user.name}! 🎉`, 'success', 3000);
             await finishLoginMotion(data.user);
           } catch (err) {
             authMsg.value = 'Connection error: ' + err.message;
@@ -966,6 +1048,7 @@ const __app = createApp({
     }
 
     async function doLogin() {
+      if (loading.value || loginSuccessVisible.value) return;
       if (!loginForm.value.email || !loginForm.value.password) {
         authMsg.value = 'Please fill in all fields.';
         authMsgType.value = 'error';
@@ -1001,7 +1084,6 @@ const __app = createApp({
         currentUser.value = data.user;
         authMsg.value = '✅ Logged in successfully!';
         authMsgType.value = 'success';
-        showToast(`Welcome back, ${data.user.name}! 🎉`, 'success', 3000);
         loginForm.value = { email: '', password: '' };
         await finishLoginMotion(data.user);
       } catch (err) {
@@ -1151,6 +1233,7 @@ const __app = createApp({
         return;
       }
 
+      if (!bookingTimesValid.value) { showToast('Choose valid arrival and departure times. Arrival must be in the future.', 'error'); return; }
       loading.value = true;
 
       try {
@@ -1161,6 +1244,8 @@ const __app = createApp({
             room_id: selectedRoom.value.id, 
             check_in_date: bookingForm.value.checkIn, 
             check_out_date: bookingForm.value.checkOut, 
+            check_in_time: bookingForm.value.checkInTime || null,
+            check_out_time: bookingForm.value.checkOutTime || null,
             num_guests: bookingForm.value.guests,
             total_price: bookingTotal.value,
             request_key: requestKey('online-booking', { room: selectedRoom.value.id, ...bookingForm.value })
@@ -1318,11 +1403,12 @@ const __app = createApp({
       selectedRoom.value = room;
       activeRoomPhoto.value = 0;
       cancelRoomPhotoGesture();
-      bookingForm.value = { checkIn: filters.value.checkIn, checkOut: filters.value.checkOut, guests: 1 };
+      bookingForm.value = { checkIn: filters.value.checkIn, checkOut: filters.value.checkOut, checkInTime: '', checkOutTime: '', guests: 1 };
       // Reset reviews state for the new room
       reviews.value = [];
       reviewsAvg.value = 0;
       reviewsTotal.value = 0;
+      reviewBreakdown.value = {}; ratingProgress.value = 0;
       reviewForm.value = { rating: 0, review: '' };
       reviewHover.value = 0;
       fetchReviews(room.id);
@@ -1331,15 +1417,22 @@ const __app = createApp({
 
     // ── REVIEWS ─────────────────────────────────
     async function fetchReviews(roomId) {
+      const sequence = ++reviewRequest;
+      reviewController?.abort(); reviewController = new AbortController();
+      reviewsLoading.value = true; reviewsError.value = '';
       try {
-        const res = await fetch(`${API_URL}/reviews?room_id=${roomId}`);
-        if (res.ok) {
-          const data = await res.json();
-          reviews.value = data.reviews || [];
-          reviewsAvg.value = data.average_rating || 0;
-          reviewsTotal.value = data.total_reviews || 0;
-        }
-      } catch (err) {}
+        const res = await fetch(`${API_URL}/reviews?room_id=${encodeURIComponent(roomId)}`, { signal: reviewController.signal, cache: 'no-store' });
+        if (!res.ok) throw new Error('Could not load this room’s reviews. Please retry.');
+        const data = await res.json();
+        if (sequence !== reviewRequest || String(selectedRoom.value?.id) !== String(roomId)) return;
+        const counts = data.rating_breakdown;
+        if (!counts || !Number.isInteger(data.total_reviews) || data.total_reviews < 0 || !Number.isFinite(Number(data.average_rating)) || Number(data.average_rating) < 0 || Number(data.average_rating) > 5 || ![1,2,3,4,5].every(star => Number.isInteger(counts[star]) && counts[star] >= 0) || Object.values(counts).reduce((sum, n) => sum + n, 0) !== data.total_reviews) throw new Error('Review summary unavailable. Please retry.');
+        reviews.value = data.reviews || [];
+        reviewsAvg.value = Number(data.average_rating); reviewsTotal.value = data.total_reviews;
+        reviewBreakdown.value = counts;
+      } catch (err) {
+        if (sequence === reviewRequest && err.name !== 'AbortError') reviewsError.value = err.message;
+      } finally { if (sequence === reviewRequest) reviewsLoading.value = false; }
     }
 
     async function submitReview() {
@@ -1888,9 +1981,9 @@ const __app = createApp({
     return {
       notifications, notificationUnread, notificationsOpen, notificationsBusy, notificationsError, notificationsOlder,
       fetchNotifications, toggleNotifications, closeNotifications, markNotificationsRead, openNotification, notificationDate,
-      page, authTab, dashTab, authMsg, authMsgType, authMsgKey, showRoomModal, editingRoom, loading, mobileMenuOpen,
+      page, authTab, dashTab, accountSection, authMsg, authMsgType, authMsgKey, showRoomModal, editingRoom, loading, mobileMenuOpen,
       today, currentUser, token, loginForm, regForm, showLoginPw, showRegPw, showRegConfirmPw, rooms, filters, selectedRoom,
-      bookingForm, roomForm, lastBooking, allBookings, features, teamMembers, faqs,
+      bookingForm, bookingTimesValid, formatGuestTime, roomForm, lastBooking, allBookings, features, teamMembers, faqs,
       filteredRooms, bookingNights, bookingTotal, upcomingBookings, pastBookings,
       guestBookingPage, guestBookingPageCount, guestBookingRangeStart, guestBookingRangeEnd, activeGuestBookings, pagedGuestBookings, changeGuestBookingPage,
       guestServicePage, guestServicePageCount, guestServiceRangeStart, guestServiceRangeEnd, pagedGuestServices, changeGuestServicePage,
@@ -1923,12 +2016,12 @@ const __app = createApp({
       footerShareUrl, footerRevealed, setFooterReveal,
       profileForm, profileDirty, profileSaving, profileError, profileMessage, discardProfile, saveProfile,
       browsingSections, setSectionNavigation,
-      setLoginLogo,
+      setLoginLogo, loginSuccessVisible, setLoginSuccessDialog,
       setStaffPullRefresh, setGuestPullRefresh,
       setLiquidTabs, mobileActiveTab,
       setPaymentSuccessIcon,
-      ratingProgress, ratingRows, ratingAverage, animateRating, setRatingCard,
-      revenueRange, revenueVisible, revenueLatest, revenueGrowth, revenueScale, revenueMoney,
+      ratingProgress, ratingRows, ratingAverage, ratingValue, animateRating, setRatingCard,
+      revenueRange, revenueVisible, revenueLatest, revenueTotal, revenueScale, revenueMoney, revenueAxisMoney, revenueLoading, revenueError, revenueUpdated, fetchRevenue,
       staffTab, staffBookingSearch, staffBookingStatus, filteredStaffBookings, staffRefreshing, refreshStaffDashboard,
       guestRefreshing, refreshGuestDashboard, formatGuestDate, roomsLoading, roomLoadError,
       roomPhotos, activeRoomPhoto, changeRoomPhoto,
@@ -1951,7 +2044,7 @@ const __app = createApp({
       chooseServicePhoto, removeServicePhoto, handleServicePhoto,
       showToast,
       // ── reviews ──
-      reviews, reviewsAvg, reviewsTotal, reviewForm, reviewHover,
+      reviews, reviewsAvg, reviewsTotal, reviewForm, reviewHover, reviewsLoading, reviewsError, fetchReviews,
       eligibleBooking, submitReview,
     };
   }
