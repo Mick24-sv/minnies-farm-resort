@@ -40,3 +40,4 @@ client_secret*.json
 *.env.bak
 .codex/
 .agents/
+examples/**/outputs/

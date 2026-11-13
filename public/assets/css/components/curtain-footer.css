@@ -1,0 +1,28 @@
+:root{--footer-reveal-height:max(55vh,320px)}
+@supports(height:1svh){:root{--footer-reveal-height:max(55svh,320px)}}
+.site-curtain{position:relative;z-index:1;min-height:100vh;background:var(--sand);box-shadow:0 18px 35px #23352822}
+.footer-reveal-space{height:var(--footer-reveal-height);pointer-events:none}
+.accent-footer{position:fixed;z-index:0;inset:auto 0 0;height:var(--footer-reveal-height);padding:38px max(30px,calc((100vw - 1160px)/2));background:#c9a84c;color:#253c2d;display:flex;flex-direction:column;justify-content:space-between;gap:18px;font-family:'DM Sans',sans-serif;overflow-y:auto}
+.accent-footer-top{display:flex;justify-content:space-between;gap:30px;align-items:flex-start}
+.accent-footer-kicker{font-size:9px;letter-spacing:1.6px;margin:0 0 15px}
+.accent-footer h2{font:500 clamp(30px,4vw,58px)/1.1 'DM Sans',sans-serif;letter-spacing:-1.8px;max-width:16ch;margin:0}
+.accent-footer-cta{display:inline-flex;align-items:center;gap:25px;margin-top:18px;padding:11px 0;background:none;border:0;border-bottom:1px solid #253c2d88;color:inherit;font:500 12px 'DM Sans',sans-serif;cursor:pointer}
+.accent-footer-links{display:flex;flex-direction:column;gap:11px;padding-top:5px;min-width:140px}
+.accent-footer-links button,.accent-footer-links a{background:none;border:0;padding:3px 0;text-decoration:none;color:inherit;text-align:left;font:400 12px 'DM Sans',sans-serif;cursor:pointer;min-height:28px}
+.accent-footer-links button:hover,.accent-footer-links a:hover{text-decoration:underline;text-underline-offset:4px}
+.accent-footer-bottom{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;border-top:1px solid #253c2d35;padding-top:19px;font-size:10px;color:#344a30}
+.accent-footer-brand{font-weight:500;font-size:15px;letter-spacing:-.3px}
+.footer-socials{display:flex;align-items:center;gap:8px}
+.footer-social-button{position:relative;isolation:isolate;display:grid;place-items:center;width:42px;height:42px;border:1px solid #253c2d55;border-radius:50%;overflow:hidden;background:#f5f0e830;color:#253c2d;text-decoration:none;transform:translateY(0) scale(1);transition:transform .22s cubic-bezier(.2,.8,.2,1),box-shadow .22s,border-color .22s;-webkit-tap-highlight-color:transparent}
+.footer-social-button::before{content:'';position:absolute;inset:0;z-index:-1;background:var(--gold-light);border-radius:inherit;transform:translateY(102%);transition:transform .22s cubic-bezier(.2,.8,.2,1)}
+.footer-social-button svg{width:17px;height:17px;fill:currentColor;pointer-events:none}
+.footer-social-button svg[fill="none"]{fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+@media(hover:hover){.footer-social-button:hover{transform:translateY(-4px);border-color:#253c2d88;box-shadow:0 7px 12px #253c2d1c}.footer-social-button:hover::before{transform:translateY(0)}}
+.footer-social-button:focus-visible::before,.footer-social-button:active::before{transform:translateY(0)}
+.footer-social-button:active{transform:translateY(1px) scale(.94);box-shadow:0 1px 2px #253c2d18;transition-duration:70ms}
+.accent-footer .footer-social-button:focus-visible{border-radius:50%;outline-offset:4px}
+@media(max-width:768px){.footer-socials{gap:6px}.footer-social-button{width:40px;height:40px}}
+@media(prefers-reduced-motion:reduce){.footer-social-button,.footer-social-button::before{transition:none}.footer-social-button:hover,.footer-social-button:active{transform:none}}
+.accent-footer button:focus-visible,.accent-footer a:focus-visible{outline:2px solid #253c2d;outline-offset:5px;border-radius:2px}
+@media(max-width:768px){.accent-footer{padding:24px 24px calc(90px + env(safe-area-inset-bottom,0px));gap:16px}.accent-footer h2{font-size:32px;letter-spacing:-1px}.accent-footer-top{gap:15px}.accent-footer-links{min-width:85px;gap:5px}.accent-footer-links a,.accent-footer-links button{font-size:10px}.accent-footer-kicker{font-size:8px;margin-bottom:10px}.accent-footer-cta{font-size:11px;gap:14px;margin-top:12px}.accent-footer-bottom{font-size:8px;padding-top:12px}.accent-footer-brand{font-size:12px}.footer-reveal-space{height:calc(var(--footer-reveal-height) - 82px - env(safe-area-inset-bottom,0px))}}
+@media(prefers-reduced-motion:reduce){.site-curtain{box-shadow:none}.accent-footer{position:relative;height:auto;min-height:var(--footer-reveal-height)}.footer-reveal-space{display:none}}

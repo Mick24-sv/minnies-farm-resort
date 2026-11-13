@@ -1,0 +1,9 @@
+html.lenis,html.lenis body{height:auto}.lenis.lenis-smooth{scroll-behavior:auto!important}.lenis.lenis-smooth [data-lenis-prevent]{overscroll-behavior:contain}.lenis.lenis-stopped{overflow:hidden}
+[data-scroll-section]{scroll-margin-top:80px}
+.sticky-nav-pill{display:none}
+@media(min-width:1101px){
+ #main-navigation{position:relative;isolation:isolate}
+ .sticky-nav-pill{display:block;position:absolute;pointer-events:none;background:#ffffff14;border:1px solid #ffffff12;border-radius:8px;opacity:0;z-index:0}
+ #main-navigation>.nav-btn{position:relative;z-index:1}
+ #main-navigation>.nav-btn:hover{background:#ffffff08}
+}

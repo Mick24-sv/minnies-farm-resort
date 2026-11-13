@@ -6,18 +6,98 @@ const API_URL = window.location.hostname === 'localhost' || window.location.host
 
 const __app = createApp({
   setup() {
+    const loginLogo = window.createLoginLogo();
+    const setLoginLogo = loginLogo.mount;
+    async function finishLoginMotion(user) {
+      await nextTick();
+      await loginLogo.play();
+      if (page.value === 'auth') navigate(user.role === 'staff' ? 'dashboard' : 'rooms');
+    }
+    const setLiquidTabs = window.createLiquidTabs();
+    const setPaymentSuccessIcon = window.createPaymentSuccessMotion();
     const page = ref('home');
+    const beginOnboardingTour = window.createOnboardingTour();
+    async function startOnboardingTour() {
+      mobileMenuOpen.value = false; notificationsOpen.value = false;
+      await nextTick(); beginOnboardingTour();
+    }
+    const footerShareUrl = encodeURIComponent(window.location.origin + window.location.pathname);
+    const footerRevealed = ref(false);
+    let footerObserver = null, footerMarker = null;
+    const footerMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+    function updateFooterAccess() {
+      if (footerMotion.matches || !('IntersectionObserver' in window)) { footerRevealed.value = true; return; }
+      if (footerMarker) {
+        const bounds = footerMarker.getBoundingClientRect();
+        footerRevealed.value = bounds.top < window.innerHeight && bounds.bottom <= window.innerHeight + 2;
+      }
+    }
+    function setFooterReveal(element) {
+      if (element === footerMarker) return;
+      footerObserver?.disconnect(); footerMotion.removeEventListener('change', updateFooterAccess);
+      footerMarker = element;
+      if (!element) return;
+      footerMotion.addEventListener('change', updateFooterAccess);
+      if ('IntersectionObserver' in window) {
+        footerObserver = new IntersectionObserver(updateFooterAccess, { threshold: [0, 0.5, 0.98, 1] });
+        footerObserver.observe(element);
+      }
+      updateFooterAccess();
+    }
+    const browsingSections = computed(() => ['home','rooms','services','about'].includes(page.value));
+    const sectionNavigation = window.createSectionNavigation(() => page.value, section => { page.value = section; });
+    const setSectionNavigation = sectionNavigation.mount;
     const authTab = ref('login');
     const dashTab = ref('upcoming');
 
+    // Tokens persist only in this tab. Remove the previous long-lived storage entry.
+    try { localStorage.removeItem('token'); } catch (e) {}
     // Safe token retrieval
     let savedToken = '';
     try {
-      savedToken = localStorage.getItem('token') || '';
+      savedToken = sessionStorage.getItem('token') || '';
     } catch (e) {
     }
     const token = ref(savedToken);
     const currentUser = ref(null);
+    const profileForm = ref({ firstName: '', lastName: '' });
+    const profileSaved = ref({ firstName: '', lastName: '' });
+    const profileSaving = ref(false), profileError = ref(''), profileMessage = ref('');
+    const profileDirty = computed(() => profileForm.value.firstName !== profileSaved.value.firstName || profileForm.value.lastName !== profileSaved.value.lastName);
+    watch(() => currentUser.value?.id, () => {
+      const parts = (currentUser.value?.name || '').trim().split(/\s+/);
+      profileSaved.value = { firstName: parts.shift() || '', lastName: parts.join(' ') };
+      profileForm.value = { ...profileSaved.value }; profileError.value = ''; profileMessage.value = '';
+    }, { immediate: true });
+    watch(profileForm, () => { profileMessage.value = ''; profileError.value = ''; }, { deep: true });
+    function discardProfile() {
+      if (profileSaving.value) return;
+      profileForm.value = { ...profileSaved.value }; profileError.value = '';
+    }
+    async function saveProfile() {
+      if (profileSaving.value || !profileDirty.value || !currentUser.value) return;
+      const name = [profileForm.value.firstName.trim(), profileForm.value.lastName.trim()].filter(Boolean).join(' ');
+      if (!profileForm.value.firstName.trim() || name.length > 100) { profileError.value = 'Enter your first name. Your full name must be 100 characters or fewer.'; return; }
+      const session = token.value;
+      profileSaving.value = true; profileError.value = ''; profileMessage.value = '';
+      try {
+        const response = await fetch(`${API_URL}/auth/profile`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session}` }, body: JSON.stringify({ name }) });
+        const data = await response.json();
+        if (token.value !== session) return;
+        if (!response.ok || !data.user) throw new Error(data.error || 'Could not save your profile. Please try again.');
+        currentUser.value = { ...currentUser.value, ...data.user };
+        profileSaved.value = { firstName: profileForm.value.firstName.trim(), lastName: profileForm.value.lastName.trim() };
+        profileForm.value = { ...profileSaved.value };
+        await nextTick(); profileMessage.value = 'Your profile has been saved.';
+      } catch (error) { if (token.value === session) profileError.value = error.message; }
+      finally { profileSaving.value = false; }
+    }
+    const mobileActiveTab = computed(() => {
+      if (['detail', 'booking', 'book'].includes(page.value)) return 'rooms';
+      if (page.value === 'service-confirm') return 'services';
+      if (['dashboard', 'profile', 'auth', 'confirm', 'forgot', 'reset'].includes(page.value)) return 'account';
+      return page.value;
+    });
 
     const notifications = ref([]), notificationUnread = ref(0), notificationsOpen = ref(false);
     const notificationsBusy = ref(false), notificationsError = ref(''), notificationsOlder = ref(false);
@@ -203,10 +283,58 @@ const __app = createApp({
       reader.readAsDataURL(file);
     }
     const staffTab = ref('bookings');
+    const ratingProgress = ref(0);
+    const ratingRows = [{stars:5,count:850},{stars:4,count:115},{stars:3,count:25},{stars:2,count:5},{stars:1,count:5}];
+    const ratingAverage = computed(() => (4.8 * ratingProgress.value).toFixed(1));
+    let ratingElement = null, ratingObserver = null, ratingFrame = 0;
+    function animateRating() {
+      cancelAnimationFrame(ratingFrame);
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { ratingProgress.value = 1; return; }
+      ratingProgress.value = 0;
+      let started;
+      function tick(timestamp) {
+        if (started === undefined) started = timestamp;
+        const elapsed = Math.min((timestamp - started) / 1500, 1);
+        ratingProgress.value = 1 - Math.pow(1 - elapsed, 3);
+        if (elapsed < 1) ratingFrame = requestAnimationFrame(tick);
+      }
+      ratingFrame = requestAnimationFrame(tick);
+    }
+    function setRatingCard(element) {
+      if (element === ratingElement) return;
+      ratingObserver?.disconnect(); cancelAnimationFrame(ratingFrame);
+      ratingElement = element;
+      if (!element) return;
+      ratingProgress.value = 0;
+      if (!('IntersectionObserver' in window)) { animateRating(); return; }
+      ratingObserver = new IntersectionObserver(entries => {
+        if (entries.some(entry => entry.isIntersecting)) { ratingObserver.disconnect(); animateRating(); }
+      }, { threshold: 0.25 });
+      ratingObserver.observe(element);
+    }
+    const revenueRange = ref(6);
+    // Sample subscription metrics, unrelated to resort receipts.
+    const revenueHistory = [[72000,6000,2600],[75400,7200,3100],[79500,6500,2400],[83600,8200,3300],[88500,7600,2900],[93200,9100,3500],[98800,8500,3200],[104100,10600,3900],[110800,9800,3400],[117200,11200,4100],[124300,12500,4600],[132200,14800,4200]];
+    const revenueMonths = computed(() => {
+      const current = new Date(new Date().toLocaleDateString('en-US', { timeZone: 'Asia/Manila' }));
+      return revenueHistory.map(([base, expansion, churn], index) => {
+        const date = new Date(current.getFullYear(), current.getMonth() - 11 + index, 1);
+        return { base, expansion, churn, net: base + expansion - churn,
+          label: date.toLocaleDateString('en-US', { month: 'short' }),
+          fullLabel: date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) };
+      });
+    });
+    const revenueVisible = computed(() => revenueMonths.value.slice(-revenueRange.value));
+    const revenueLatest = computed(() => revenueMonths.value.at(-1));
+    const revenueGrowth = computed(() => ((revenueMonths.value.at(-1).net / revenueMonths.value.at(-2).net - 1) * 100).toFixed(1));
+    const revenueScale = computed(() => Math.ceil(Math.max(...revenueVisible.value.map(row => row.base + row.expansion)) / 40000) * 40000);
+    const revenueMoney = value => new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', maximumFractionDigits: 0 }).format(value);
     const staffBookingSearch = ref('');
     const staffBookingStatus = ref('');
     const staffRefreshing = ref(false);
     const guestRefreshing = ref(false);
+    const setStaffPullRefresh = window.createPullRefresh(async () => { await refreshStaffDashboard(); await nextTick(); }, () => staffRefreshing.value || paymentBusy.value);
+    const setGuestPullRefresh = window.createPullRefresh(async () => { await refreshGuestDashboard(); await nextTick(); }, () => guestRefreshing.value || paymentBusy.value);
     async function refreshGuestDashboard() {
       if (guestRefreshing.value) return;
       guestRefreshing.value = true;
@@ -569,6 +697,9 @@ const __app = createApp({
 
     async function doResetPassword() {
       if (!resetPassword.value || !resetPasswordConfirm.value) return;
+      if (resetPassword.value.length < 12 || resetPassword.value.length > 256) {
+        resetMsg.value = 'Use a password with 12 to 256 characters.'; resetMsgType.value = 'error'; return;
+      }
       if (resetPassword.value !== resetPasswordConfirm.value) {
         resetMsg.value = 'Passwords do not match.';
         resetMsgType.value = 'error';
@@ -752,15 +883,17 @@ const __app = createApp({
     }
 
     function navigate(p) {
+      const wasBrowsing = browsingSections.value;
       page.value = p;
       mobileMenuOpen.value = false; // Close mobile menu on navigation
       authMsg.value = '';
-      if (p === 'rooms') { rooms.value = []; setTimeout(fetchRooms, 50); }
+      if (p === 'rooms' && !wasBrowsing) fetchRooms();
       if (p === 'dashboard') {
         if (currentUser.value?.role === 'staff') { fetchAllBookings(); fetchServiceAvails(); }
         else { fetchUserBookings(); fetchServiceAvails(); }
       }
-      if (p === 'services') { services.value = []; setTimeout(fetchServices, 50); }
+      if (p === 'services' && !wasBrowsing) fetchServices();
+      nextTick(() => sectionNavigation.go(p));
     }
 
     // ── AUTH ───────────────────────────────────────────────────────────────────
@@ -816,12 +949,12 @@ const __app = createApp({
             }
             
             token.value = data.token;
-            localStorage.setItem('token', data.token);
+            sessionStorage.setItem('token', data.token);
             currentUser.value = data.user;
             authMsg.value = '✅ Logged in with Google!';
             authMsgType.value = 'success';
             showToast(`Welcome, ${data.user.name}! 🎉`, 'success', 3000);
-            setTimeout(() => navigate(data.user.role === 'staff' ? 'dashboard' : 'rooms'), 800);
+            await finishLoginMotion(data.user);
           } catch (err) {
             authMsg.value = 'Connection error: ' + err.message;
             authMsgType.value = 'error';
@@ -864,13 +997,13 @@ const __app = createApp({
           return;
         }
         token.value = data.token;
-        localStorage.setItem('token', data.token);
+        sessionStorage.setItem('token', data.token);
         currentUser.value = data.user;
         authMsg.value = '✅ Logged in successfully!';
         authMsgType.value = 'success';
         showToast(`Welcome back, ${data.user.name}! 🎉`, 'success', 3000);
         loginForm.value = { email: '', password: '' };
-        setTimeout(() => navigate(data.user.role === 'staff' ? 'dashboard' : 'rooms'), 800);
+        await finishLoginMotion(data.user);
       } catch (err) {
         authMsg.value = 'Connection error: ' + err.message;
         authMsgType.value = 'error';
@@ -881,6 +1014,9 @@ const __app = createApp({
     }
 
     async function doRegister() {
+      if (regForm.value.password.length < 12 || regForm.value.password.length > 256) {
+        authMsg.value = 'Use a password with 12 to 256 characters.'; authMsgType.value = 'error'; authMsgKey.value++; return;
+      }
       if (!regForm.value.name || !regForm.value.email || !regForm.value.password) {
         authMsg.value = 'Please fill in all fields.'; 
         authMsgType.value = 'error'; 
@@ -942,7 +1078,7 @@ const __app = createApp({
       } catch (err) {}
       currentUser.value = null;
       token.value = '';
-      localStorage.removeItem('token');
+      sessionStorage.removeItem('token');
       navigate('home');
     }
 
@@ -951,7 +1087,7 @@ const __app = createApp({
       try {
         const res = await fetch(`${API_URL}/auth/me`, { headers: { 'Authorization': `Bearer ${token.value}` } });
         if (res.ok) { const data = await res.json(); currentUser.value = data.user; }
-        else { localStorage.removeItem('token'); token.value = ''; }
+        else { sessionStorage.removeItem('token'); token.value = ''; }
       } catch (err) {}
     }
 
@@ -999,7 +1135,7 @@ const __app = createApp({
     function clearSessionAndGoToAuth(message = 'Your session expired. Please log in again.') {
       currentUser.value = null;
       token.value = '';
-      try { localStorage.removeItem('token'); } catch (e) {}
+      try { sessionStorage.removeItem('token'); } catch (e) {}
       showToast(message, 'error');
       navigate('auth');
     }
@@ -1094,7 +1230,7 @@ const __app = createApp({
       try {
         const res = await fetch(`${API_URL}/bookings?staff=true&_t=${Date.now()}`, { 
           headers: { 
-            'Authorization': `Bearer ${token.value || localStorage.getItem('token')}`,
+            'Authorization': `Bearer ${token.value || sessionStorage.getItem('token')}`,
             'Cache-Control': 'no-cache',
             'Pragma': 'no-cache'
           } 
@@ -1148,7 +1284,7 @@ const __app = createApp({
 
     async function updateBookingStatus(b, status) {
       try {
-        const t = token.value || localStorage.getItem('token');
+        const t = token.value || sessionStorage.getItem('token');
         const res = await fetch(`${API_URL}/bookings/${b.id}/status`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${t}` },
@@ -1261,7 +1397,7 @@ const __app = createApp({
       try {
         const method = editingRoom.value ? 'PUT' : 'POST';
         const url = editingRoom.value ? `${API_URL}/rooms/${editingRoom.value.id}` : `${API_URL}/rooms`;
-        const t = token.value || localStorage.getItem('token');
+        const t = token.value || sessionStorage.getItem('token');
         const res = await fetch(url, {
           method,
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${t}` },
@@ -1314,7 +1450,7 @@ const __app = createApp({
     async function confirmDeleteRoom() {
       loading.value = true;
       try {
-        const t = token.value || localStorage.getItem('token');
+        const t = token.value || sessionStorage.getItem('token');
         const res = await fetch(`${API_URL}/rooms/${pendingDeleteRoom.value.id}`, {
           method: 'DELETE',
           headers: { 'Authorization': `Bearer ${t}` }
@@ -1425,7 +1561,7 @@ const __app = createApp({
     }
 
     async function confirmDeleteServiceAvail() {
-      const t = token.value || localStorage.getItem('token');
+      const t = token.value || sessionStorage.getItem('token');
       if (!pendingDeleteId.value) return;
       if (!t) { showToast('Please log in again.', 'error'); return; }
       loading.value = true;
@@ -1476,7 +1612,7 @@ const __app = createApp({
     }
 
     async function updateAvailStatus(id, newStatus) {
-      const t = token.value || localStorage.getItem('token');
+      const t = token.value || sessionStorage.getItem('token');
       if (!id) { showToast('Invalid request id.', 'error'); return; }
       if (!t) { showToast('Please log in again.', 'error'); return; }
       showToast('Updating service request...', 'info');
@@ -1574,12 +1710,12 @@ const __app = createApp({
 
     async function saveService() {
       if (serviceEditorBusy.value) return;
-      if (!token.value && !localStorage.getItem('token')) { navigate('auth'); return; }
+      if (!token.value && !sessionStorage.getItem('token')) { navigate('auth'); return; }
       if (!serviceForm.value.name) { showToast('Service name is required', 'error'); return; }
 
       loading.value = true;
       try {
-        const t = token.value || localStorage.getItem('token');
+        const t = token.value || sessionStorage.getItem('token');
         const isEdit = !!editingService.value;
         const url = isEdit
           ? `${API_URL}/services/${editingService.value.id}`
@@ -1635,7 +1771,7 @@ const __app = createApp({
     async function confirmDeleteService() {
       loading.value = true;
       try {
-        const t = token.value || localStorage.getItem('token');
+        const t = token.value || sessionStorage.getItem('token');
         const res = await fetch(`${API_URL}/services/${pendingDeleteService.value.id}`, {
           method: 'DELETE',
           headers: { 'Authorization': `Bearer ${t}` }
@@ -1783,6 +1919,16 @@ const __app = createApp({
       triggerUpload,
       removeImage,
       handleFileUpload,
+      startOnboardingTour,
+      footerShareUrl, footerRevealed, setFooterReveal,
+      profileForm, profileDirty, profileSaving, profileError, profileMessage, discardProfile, saveProfile,
+      browsingSections, setSectionNavigation,
+      setLoginLogo,
+      setStaffPullRefresh, setGuestPullRefresh,
+      setLiquidTabs, mobileActiveTab,
+      setPaymentSuccessIcon,
+      ratingProgress, ratingRows, ratingAverage, animateRating, setRatingCard,
+      revenueRange, revenueVisible, revenueLatest, revenueGrowth, revenueScale, revenueMoney,
       staffTab, staffBookingSearch, staffBookingStatus, filteredStaffBookings, staffRefreshing, refreshStaffDashboard,
       guestRefreshing, refreshGuestDashboard, formatGuestDate, roomsLoading, roomLoadError,
       roomPhotos, activeRoomPhoto, changeRoomPhoto,

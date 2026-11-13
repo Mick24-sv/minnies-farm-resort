@@ -89,12 +89,12 @@ def install_email_delivery(app, rpc, db, env):
     def reset_password_email():
         data = request.get_json(silent=True) or {}
         token, password = data.get('token'), data.get('password')
-        if not isinstance(token, str) or not 20 <= len(token) <= 200 or not isinstance(password, str) or not 8 <= len(password) <= 256:
-            return jsonify({'error': 'Use a valid reset link and a password with 8 to 256 characters.'}), 400
+        if not isinstance(token, str) or not 20 <= len(token) <= 200 or not isinstance(password, str) or not 12 <= len(password) <= 256:
+            return jsonify({'error': 'Use a valid reset link and a password with 12 to 256 characters.'}), 400
         try:
             changed = rpc('resort_reset_password', {
                 'p_token_hash': hashlib.sha256(token.encode()).hexdigest(),
-                'p_password_hash': pbkdf2_sha256.hash(password),
+                'p_password_hash': pbkdf2_sha256.using(rounds=600000).hash(password),
             })
             if not changed:
                 return jsonify({'error': 'Invalid or expired reset link. Request a new one.'}), 400

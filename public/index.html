@@ -5,25 +5,25 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Minnie's Farm Resort</title>
   <link rel="icon" type="image/svg+xml" href="assets/images/minnies-icon.svg">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/vue/3.3.4/vue.global.prod.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/vue/3.3.4/vue.global.prod.min.js" integrity="sha384-SJryPPpDlXNedbaZbEMw2pnpu547jJMdVSl629Pl93/m31uczEEaSMnmQQtRp0sn" crossorigin="anonymous"></script>
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="assets/css/style.css?v=4.2">
+  <link rel="stylesheet" href="assets/css/components/revenue.css?v=1">
+  <link rel="stylesheet" href="assets/css/components/rating.css?v=1">
+  <link rel="stylesheet" href="assets/css/components/payment-success.css?v=1">
+  <link rel="stylesheet" href="assets/css/components/liquid-tabs.css?v=1">
+  <link rel="stylesheet" href="assets/css/components/pull-refresh.css?v=1">
+  <link rel="stylesheet" href="assets/css/components/login-logo.css?v=1">
+  <link rel="stylesheet" href="assets/css/components/section-navigation.css?v=1">
+  <link rel="stylesheet" href="assets/css/pages/profile.css?v=1">
+  <link rel="stylesheet" href="assets/css/components/curtain-footer.css?v=1">
+  <link rel="stylesheet" href="assets/css/components/onboarding-tour.css?v=1">
   <style>
     /* CRITICAL: Ensure Vue templates are hidden until rendering */
     [v-cloak] { display: none !important; }
   </style>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <script>
-    window.fbAsyncInit = function() {
-      FB.init({
-        appId: '1466993811807543',
-        cookie: true,
-        xfbml: true,
-        version: 'v19.0'
-      });
-    };
-  </script>
-  <script async defer crossorigin="anonymous" src="https://connect.facebook.net/en_US/sdk.js"></script>
+
 <style>
   .image-manage-grid {
     display: flex !important;
@@ -84,6 +84,7 @@
 </head>
 <body>
 <div id="app" v-cloak>
+  <div class="site-curtain">
   <!-- TOAST NOTIFICATIONS -->
   <div class="toast-container">
     <div v-for="(toast, idx) in toasts" :key="idx" :class="['toast', toast.type, {removing: toast.removing}]" :role="toast.type==='error' ? 'alert' : 'status'" aria-atomic="true">
@@ -92,7 +93,7 @@
   </div>
 
   <!-- NAVBAR -->
-  <nav>
+  <nav :ref="setSectionNavigation">
     <button type="button" class="nav-brand" @click="navigate('home')" aria-label="Minnie's Farm Resort home"><img src="assets/images/minnies-logo-header.svg" alt="Minnie's Farm Resort" width="810" height="165" /></button>
     <div v-if="currentUser" class="notification-control notification-control-mobile" @keydown.esc.stop.prevent="closeNotifications">
       <button id="notification-bell-mobile" type="button" class="notification-bell" @click="toggleNotifications" :aria-label="'Notifications, ' + notificationUnread + ' unread'" :aria-expanded="notificationsOpen" aria-controls="notification-inbox">
@@ -104,15 +105,18 @@
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path v-if="mobileMenuOpen" d="m6 6 12 12M6 18 18 6"/><path v-else d="M4 6h16M4 12h16M4 18h16"/></svg>
     </button>
     <div id="main-navigation" class="nav-links" :class="{ active: mobileMenuOpen }">
+      <span class="sticky-nav-pill" aria-hidden="true"></span>
+      <button class="nav-btn" data-section="home" :class="{active:page==='home'}" :aria-current="page==='home' ? 'location' : null" @click="navigate('home')">Home</button>
       <template v-if="currentUser">
         <span class="nav-role-badge">{{ currentUser.role }}</span>
-        <button class="nav-btn" :class="{active: page==='rooms'}" @click="navigate('rooms')">Browse Rooms</button>
-        <button class="nav-btn" :class="{active: page==='services'}" @click="navigate('services')">Services</button>
-        <button class="nav-btn" :class="{active: page==='about'}" @click="navigate('about')">About Us</button>
-        <button class="nav-btn" :class="{active: page==='dashboard'}" @click="navigate('dashboard')">
+        <button class="nav-btn" data-section="rooms" :aria-current="page==='rooms' ? 'location' : null" :class="{active: page==='rooms'}" @click="navigate('rooms')">Browse Rooms</button>
+        <button class="nav-btn" data-section="services" :aria-current="page==='services' ? 'location' : null" :class="{active: page==='services'}" @click="navigate('services')">Services</button>
+        <button class="nav-btn" data-section="about" :aria-current="page==='about' ? 'location' : null" :class="{active: page==='about'}" @click="navigate('about')">About Us</button>
+        <button class="nav-btn" data-section="dashboard" :aria-current="page==='dashboard' ? 'location' : null" :class="{active: page==='dashboard'}" @click="navigate('dashboard')">
           {{ currentUser.role === 'staff' ? 'Staff Dashboard' : 'My Bookings' }}
         </button>
         <div class="nav-account-actions">
+          <button type="button" class="nav-btn" data-section="profile" :class="{active:page==='profile'}" @click="navigate('profile')">Profile</button>
           <div class="notification-control notification-control-desktop" @keydown.esc.stop.prevent="closeNotifications">
             <button id="notification-bell" type="button" class="notification-bell" @click="toggleNotifications" :aria-label="'Notifications, ' + notificationUnread + ' unread'" :aria-expanded="notificationsOpen" aria-controls="notification-inbox">
               <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg>
@@ -123,11 +127,12 @@
         </div>
       </template>
       <template v-else>
-        <button class="nav-btn" :class="{active: page==='rooms'}" @click="navigate('rooms')">Browse Rooms</button>
-        <button class="nav-btn" :class="{active: page==='services'}" @click="navigate('services')">Services</button>
-        <button class="nav-btn" :class="{active: page==='about'}" @click="navigate('about')">About Us</button>
+        <button class="nav-btn" data-section="rooms" :aria-current="page==='rooms' ? 'location' : null" :class="{active: page==='rooms'}" @click="navigate('rooms')">Browse Rooms</button>
+        <button class="nav-btn" data-section="services" :aria-current="page==='services' ? 'location' : null" :class="{active: page==='services'}" @click="navigate('services')">Services</button>
+        <button class="nav-btn" data-section="about" :aria-current="page==='about' ? 'location' : null" :class="{active: page==='about'}" @click="navigate('about')">About Us</button>
         <button class="nav-btn nav-btn-primary" @click="navigate('auth')">Login / Register</button>
       </template>
+      <button type="button" class="nav-btn" @click="startOnboardingTour">Take a tour</button>
     </div>
       <template v-if="notificationsOpen">
         <button class="notification-backdrop" type="button" tabindex="-1" aria-label="Close notifications" @click="closeNotifications"></button>
@@ -148,8 +153,26 @@
       </template>
   </nav>
 
+  <div class="mobile-bottom-tabs" role="navigation" aria-label="Mobile navigation" :ref="setLiquidTabs">
+    <span class="liquid-tab-indicator" aria-hidden="true"></span>
+    <button type="button" :aria-current="mobileActiveTab==='home' ? 'page' : null" @click="navigate('home')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7M5 9v12h5v-7h4v7h5V9"/></svg><span>Home</span></button>
+    <button type="button" :aria-current="mobileActiveTab==='rooms' ? 'page' : null" @click="navigate('rooms')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 18v3M21 18v3M3 18h18V9H3v9ZM3 9V5h18v4M7 9v4h4V9M13 9v4h4V9"/></svg><span>Rooms</span></button>
+    <button type="button" :aria-current="mobileActiveTab==='services' ? 'page' : null" @click="navigate('services')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v3M4 12H1M23 12h-3M4 4l2 2M20 4l-2 2M3 21c3-3 5 3 8 0s5 3 10 0M6 17a7 7 0 1 1 12 0"/></svg><span>Services</span></button>
+    <button type="button" :aria-current="mobileActiveTab==='account' ? 'page' : null" @click="navigate(currentUser ? 'dashboard' : 'auth')"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/></svg><span>{{ currentUser?.role==='staff' ? 'Dashboard' : currentUser ? 'Bookings' : 'Account' }}</span></button>
+  </div>
+
+  <main v-if="page==='profile' && currentUser" class="page profile-page">
+    <div class="profile-shell"><header class="profile-heading"><p>YOUR ACCOUNT</p><h1>Settings</h1><span>A few details that make your stay more personal.</span></header>
+      <div class="profile-layout"><aside class="profile-nav" aria-label="Settings sections"><a href="#profile-personal" class="active"> <span aria-hidden="true">♙</span> Profile <span aria-hidden="true">→</span></a><a href="#profile-account"><span aria-hidden="true">▧</span> Account details</a><button type="button" @click="navigate('dashboard')"><span aria-hidden="true">↗</span> Back to dashboard</button><p>Your information is only used to manage your account and reservations.</p></aside>
+        <form id="profile-form" class="profile-card" @submit.prevent="saveProfile" :aria-busy="profileSaving"><section id="profile-personal"><div class="profile-card-heading"><div><h2>Personal information</h2><p>Let us know what to call you.</p></div><span class="profile-avatar" aria-hidden="true">{{ (profileForm.firstName || currentUser.name || 'G').charAt(0).toUpperCase() }}</span></div><fieldset :disabled="profileSaving"><legend class="revenue-sr">Your name</legend><div class="profile-fields"><label for="profile-first">First name <input id="profile-first" v-model="profileForm.firstName" autocomplete="given-name" maxlength="100" required placeholder="Your first name"></label><label for="profile-last">Last name <span class="profile-optional">(optional)</span><input id="profile-last" v-model="profileForm.lastName" autocomplete="family-name" maxlength="100" placeholder="Your last name"></label></div></fieldset></section>
+        <section id="profile-account" class="profile-account-details"><h2>Account details</h2><p>Your sign-in information and account access.</p><div class="profile-fields"><label for="profile-email">Email address<input id="profile-email" :value="currentUser.email" type="email" readonly autocomplete="email"><small>Your sign-in email is managed by the resort.</small></label><label for="profile-role">Account type<input id="profile-role" :value="currentUser.role==='staff' ? 'Staff' : 'Guest'" readonly><small>Account access is assigned by the resort.</small></label></div></section><p v-if="profileError" class="profile-error" role="alert">{{ profileError }}</p><p v-if="profileMessage" class="profile-message" role="status">✓ {{ profileMessage }}</p><footer class="profile-card-footer">Your details stay with your account, wherever you book.</footer></form>
+      </div>
+    </div>
+    <Transition name="profile-save"><div v-if="profileDirty" class="profile-save-bar"><div><span class="profile-unsaved-dot" aria-hidden="true"></span><p>You have unsaved changes<small>Save your details before moving on.</small></p></div><div><button type="button" class="profile-discard" :disabled="profileSaving" @click="discardProfile">Discard</button><button type="submit" form="profile-form" class="profile-save-button" :disabled="profileSaving">{{ profileSaving ? 'Saving…' : 'Save changes' }}</button></div></div></Transition>
+  </main>
+
   <!-- HOME -->
-  <div v-if="page==='home'" id="page-home" class="page">
+  <div v-if="browsingSections" id="section-home" data-scroll-section class="page">
     <section class="hero resort-home-hero" aria-labelledby="home-hero-heading">
       <div class="resort-hero-inner">
         <div class="resort-hero-copy">
@@ -161,6 +184,7 @@
             <button type="button" class="btn btn-outline" @click="navigate('services')">Explore day visits <span aria-hidden="true">&rarr;</span></button>
           </div>
           <div class="resort-hero-note"><span aria-hidden="true">✧</span> Room stays &nbsp; / &nbsp; Day visits &nbsp; / &nbsp; Good place</div>
+          <button type="button" class="hero-tour-button" @click="startOnboardingTour">New here? Take a quick tour →</button>
         </div>
         <figure class="resort-hero-visual">
           <img src="https://i.imgur.com/2UDN3qi.jpg" alt="A glimpse of Minnie's Farm Resort" fetchpriority="high" decoding="async" referrerpolicy="no-referrer" @error="$event.target.style.display='none'">
@@ -216,6 +240,12 @@
           <button type="button" class="auth-back" @click="navigate('rooms')"><span aria-hidden="true">&larr;</span> Back to exploring</button>
           <div class="auth-logo">
             <img class="auth-brand-image" src="assets/images/minnies-logo.svg" alt="Minnie's Farm Resort" width="810" height="165" />
+            <svg v-if="authTab==='login'" :ref="setLoginLogo" class="login-logo-motion" viewBox="0 0 192 192" aria-hidden="true">
+              <defs><g id="login-resort-mark" transform="translate(-3 -12) scale(1.2)"><circle cx="92" cy="78" r="43"/><path d="M48 95 Q71 74 91 91 Q113 69 138 94"/><path d="M69 99 L93 80 L117 99"/><path d="M75 97 V119 H111 V97"/><path d="M89 119 V104 Q93 100 97 104 V119"/><path d="M48 114 V72"/><path d="M48 72 Q40 61 27 63 Q33 77 48 76"/><path d="M48 72 Q53 59 67 59 Q62 74 48 76"/><path d="M48 84 Q37 78 25 83 Q35 92 48 91"/><path d="M48 84 Q60 77 69 81"/><path d="M45 131 Q58 125 71 131 T97 131 T149 131"/><path d="M59 140 Q73 134 86 140 T116 140"/></g></defs>
+              <g class="login-logo-flood"><rect width="192" height="192" rx="38" fill="#3275c7"/><use href="#login-resort-mark" class="login-logo-art"/></g>
+              <rect class="login-logo-outline" x="1.5" y="1.5" width="189" height="189" rx="37"/>
+              <g class="login-logo-traces" transform="translate(-3 -12) scale(1.2)"><circle class="login-logo-outline" cx="92" cy="78" r="43"/><path class="login-logo-outline" d="M48 95 Q71 74 91 91 Q113 69 138 94"/><path class="login-logo-outline" d="M69 99 L93 80 L117 99"/><path class="login-logo-outline" d="M75 97 V119 H111 V97"/><path class="login-logo-outline" d="M89 119 V104 Q93 100 97 104 V119"/><path class="login-logo-outline" d="M48 114 V72"/><path class="login-logo-outline" d="M48 72 Q40 61 27 63 Q33 77 48 76"/><path class="login-logo-outline" d="M48 72 Q53 59 67 59 Q62 74 48 76"/><path class="login-logo-outline" d="M48 84 Q37 78 25 83 Q35 92 48 91"/><path class="login-logo-outline" d="M48 84 Q60 77 69 81"/><path class="login-logo-outline" d="M45 131 Q58 125 71 131 T97 131 T149 131"/><path class="login-logo-outline" d="M59 140 Q73 134 86 140 T116 140"/></g>
+            </svg>
             <h2 id="auth-heading">{{ authTab==='login' ? 'Welcome back.' : 'Your escape awaits.' }}</h2>
             <p>{{ authTab==='login' ? 'Sign in to plan your next peaceful getaway.' : 'Create an account and make yourself at home.' }}</p>
           </div>
@@ -242,8 +272,8 @@
             <div class="form-group"><label for="register-name">Full name</label><input id="register-name" type="text" v-model.trim="regForm.name" autocomplete="name" placeholder="Juan dela Cruz" required /></div>
             <div class="form-group"><label for="register-email">Email address</label><input id="register-email" type="email" v-model.trim="regForm.email" autocomplete="email" inputmode="email" placeholder="you@example.com" required /></div>
             <div class="auth-register-passwords">
-              <div class="form-group"><label for="register-password">Password</label><div class="auth-password"><input id="register-password" :type="showRegPw ? 'text' : 'password'" v-model="regForm.password" autocomplete="new-password" placeholder="Create a password" required /><button type="button" class="auth-password-toggle" @click="showRegPw=!showRegPw" :aria-label="showRegPw ? 'Hide password' : 'Show password'" :aria-pressed="showRegPw"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/><path v-if="showRegPw" d="m3 3 18 18"/></svg></button></div></div>
-              <div class="form-group"><label for="register-confirm">Confirm password</label><div class="auth-password"><input id="register-confirm" :type="showRegConfirmPw ? 'text' : 'password'" v-model="regForm.confirm" autocomplete="new-password" placeholder="Repeat your password" required /><button type="button" class="auth-password-toggle" @click="showRegConfirmPw=!showRegConfirmPw" :aria-label="showRegConfirmPw ? 'Hide confirmation password' : 'Show confirmation password'" :aria-pressed="showRegConfirmPw"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/><path v-if="showRegConfirmPw" d="m3 3 18 18"/></svg></button></div></div>
+              <div class="form-group"><label for="register-password">Password</label><div class="auth-password"><input id="register-password" minlength="12" maxlength="256" :type="showRegPw ? 'text' : 'password'" v-model="regForm.password" autocomplete="new-password" placeholder="Create a password" required /><button type="button" class="auth-password-toggle" @click="showRegPw=!showRegPw" :aria-label="showRegPw ? 'Hide password' : 'Show password'" :aria-pressed="showRegPw"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/><path v-if="showRegPw" d="m3 3 18 18"/></svg></button></div></div>
+              <div class="form-group"><label for="register-confirm">Confirm password</label><div class="auth-password"><input id="register-confirm" minlength="12" maxlength="256" :type="showRegConfirmPw ? 'text' : 'password'" v-model="regForm.confirm" autocomplete="new-password" placeholder="Repeat your password" required /><button type="button" class="auth-password-toggle" @click="showRegConfirmPw=!showRegConfirmPw" :aria-label="showRegConfirmPw ? 'Hide confirmation password' : 'Show confirmation password'" :aria-pressed="showRegConfirmPw"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/><path v-if="showRegConfirmPw" d="m3 3 18 18"/></svg></button></div></div>
             </div>
             <button type="submit" class="auth-submit" :disabled="loading"><span>{{ loading ? 'Creating account…' : 'Create account' }}</span><span v-if="!loading" aria-hidden="true">&rarr;</span></button>
             <p class="auth-switch">Already have an account? <button type="button" class="auth-text-button" :disabled="loading" @click="authTab='login'; authMsg=''">Sign in</button></p>
@@ -255,7 +285,7 @@
   </main>
 
   <!-- ROOMS LIST -->
-  <main v-if="page==='rooms'" class="page rooms-page" v-cloak>
+  <main v-if="browsingSections" id="section-rooms" data-scroll-section class="page rooms-page" v-cloak>
     <div class="container">
       <header class="rooms-heading"><div><p class="rooms-eyebrow">STAY AT MINNIE'S</p><h1>Find your room.</h1><p>A place to settle in, with the farm just outside.</p></div><p class="rooms-result-count" role="status">{{ roomsLoading ? 'Loading rooms…' : roomLoadError ? 'Rooms unavailable' : filteredRooms.length + (filteredRooms.length === 1 ? ' room to explore' : ' rooms to explore') }}</p></header>
       <section class="room-filter-panel" aria-labelledby="room-filter-heading">
@@ -325,7 +355,7 @@
     </div>
   </main>
   <!-- SERVICES -->
-  <div v-if="page==='services'" class="page" v-cloak>
+  <div v-if="browsingSections" id="section-services" data-scroll-section class="page" v-cloak>
     <section class="services-hero resort-services-hero" aria-labelledby="services-hero-heading">
       <div class="services-hero-inner">
         <div class="services-hero-copy">
@@ -403,7 +433,7 @@
 
 
   <!-- GUEST DASHBOARD -->
-  <main v-if="page==='dashboard' && currentUser && currentUser.role==='guest'" class="page guest-dashboard">
+  <main v-if="page==='dashboard' && currentUser && currentUser.role==='guest'" class="page guest-dashboard" :ref="setGuestPullRefresh">
     <div class="container">
       <header class="guest-heading">
         <div><p class="guest-eyebrow">YOUR ACCOUNT</p><h1>Your stays</h1><p>Keep track of your reservations and requests.</p></div>
@@ -462,7 +492,7 @@
     </div>
   </main>
   <!-- STAFF DASHBOARD -->
-  <div v-if="page==='dashboard' && currentUser && currentUser.role==='staff'" class="page staff-dashboard">
+  <div v-if="page==='dashboard' && currentUser && currentUser.role==='staff'" class="page staff-dashboard" :ref="setStaffPullRefresh">
     <div class="container">
       <header class="staff-heading">
         <div><p class="staff-eyebrow">MINNIE'S FARM RESORT / STAFF</p><h1>Dashboard</h1><p class="staff-subtitle">Rooms, reservations, and the day ahead.</p></div>
@@ -471,6 +501,29 @@
           {{ staffRefreshing ? 'Refreshing…' : 'Refresh data' }}
         </button>
       </header>
+      <section class="staff-revenue" aria-labelledby="revenue-heading">
+        <div class="revenue-topline"><div><p class="revenue-eyebrow">REVENUE OVERVIEW <span>Sample data</span></p><h2 id="revenue-heading">Monthly recurring revenue</h2></div><div class="revenue-switch" role="group" aria-label="Revenue chart time range"><button v-for="range in [3,6,12]" :key="range" type="button" :class="{active:revenueRange===range}" :aria-pressed="revenueRange===range" @click="revenueRange=range">{{ range }}M</button></div></div>
+        <div class="revenue-metric"><strong>{{ revenueMoney(revenueLatest.net) }}</strong><span>↗ {{ revenueGrowth }}%</span><small>vs. previous month</small></div>
+        <div class="revenue-chart-header"><p>MRR composition <span>· PHP</span></p><div class="revenue-legend"><span><i class="revenue-base"></i>Base</span><span><i class="revenue-expansion"></i>Expansion</span><span><i class="revenue-churn"></i>Churn</span></div></div>
+        <p class="revenue-sr" role="status">Showing {{ revenueRange }} months of sample recurring revenue.</p>
+        <div class="revenue-chart-scroll"><div class="revenue-chart" :class="{'revenue-chart-year':revenueRange===12}">
+          <div class="revenue-axis" aria-hidden="true"><span v-for="fraction in [1,.75,.5,.25,0]" :key="fraction">{{ revenueMoney(revenueScale*fraction/1000) }}k</span></div>
+          <div class="revenue-plot"><div class="revenue-grid" aria-hidden="true"><i v-for="n in 5" :key="n"></i></div><div class="revenue-columns" :key="revenueRange">
+            <div v-for="row in revenueVisible" :key="row.fullLabel" class="revenue-column" tabindex="0" :aria-label="row.fullLabel + ': base ' + revenueMoney(row.base) + ', expansion ' + revenueMoney(row.expansion) + ', churn minus ' + revenueMoney(row.churn) + ', net MRR ' + revenueMoney(row.net)">
+              <div class="revenue-stack" aria-hidden="true"><div class="revenue-segment revenue-expansion" :style="{height:(row.expansion/revenueScale*100)+'%'}"></div><div class="revenue-segment revenue-base" :style="{height:(row.base/revenueScale*100)+'%'}"></div></div>
+              <div class="revenue-loss" aria-hidden="true"><div class="revenue-churn" :style="{height:(row.churn/revenueScale*220)+'px'}"></div></div><span class="revenue-month" aria-hidden="true">{{ row.label }}</span>
+              <div class="revenue-tooltip" aria-hidden="true"><b>{{ row.fullLabel }}</b><span>Base <strong>{{ revenueMoney(row.base) }}</strong></span><span>Expansion <strong>+{{ revenueMoney(row.expansion) }}</strong></span><span>Churn <strong>−{{ revenueMoney(row.churn) }}</strong></span><span>Net MRR <strong>{{ revenueMoney(row.net) }}</strong></span></div>
+            </div>
+          </div></div>
+        </div></div>
+        <div class="revenue-footnote"><span>Churn appears below zero. Net MRR = base + expansion − churn.</span><span>Illustrative SaaS metrics · Not resort income</span></div>
+      </section>
+      <section class="staff-rating" :ref="setRatingCard" aria-labelledby="rating-heading">
+        <div class="rating-heading"><div><p class="revenue-eyebrow">GUEST EXPERIENCE <span>Sample data</span></p><h2 id="rating-heading">A stay worth sharing.</h2></div><button type="button" class="rating-replay" @click="animateRating" aria-label="Replay rating animation">↻ <span>Replay</span></button></div>
+        <div class="rating-content"><div class="rating-score"><p class="rating-number" aria-hidden="true">{{ ratingAverage }}<span>/ 5</span></p><span class="revenue-sr">Average rating: 4.8 out of 5, based on 1,000 sample reviews.</span><div class="rating-stars" aria-hidden="true"><span v-for="star in 5" :key="star" class="rating-star"><svg viewBox="0 0 24 24"><path d="m12 2 3.09 6.26L22 9.27l-5 4.87L18.18 21 12 17.75 5.82 21 7 14.14 2 9.27l6.91-1.01Z"/></svg><span class="rating-star-fill" :style="{width: Math.max(0,Math.min(1,4.8*ratingProgress-star+1))*100+'%'}"><svg viewBox="0 0 24 24"><path d="m12 2 3.09 6.26L22 9.27l-5 4.87L18.18 21 12 17.75 5.82 21 7 14.14 2 9.27l6.91-1.01Z"/></svg></span></span></div><p class="rating-review-count">Based on <strong>1,000</strong> sample reviews</p><span class="rating-verdict">Loved by our guests</span></div>
+        <div class="rating-breakdown"><div v-for="row in ratingRows" :key="row.stars" class="rating-row" :aria-label="row.stars+' stars: '+row.count+' reviews, '+(row.count/10)+' percent'"><span class="rating-label" aria-hidden="true">{{ row.stars }} <span>★</span></span><div class="rating-track" aria-hidden="true"><div :style="{width:row.count/10*ratingProgress+'%'}"></div></div><span class="rating-percent" aria-hidden="true">{{ row.count/10 }}%</span><span class="rating-count" aria-hidden="true">{{ row.count }}</span></div></div></div>
+        <p class="rating-disclaimer">Illustrative guest feedback · Not connected to live reviews</p>
+      </section>
       <dl class="staff-stats">
         <div><dt>Total rooms</dt><dd>{{ rooms.length }}</dd><dd class="staff-stat-note">Across the resort</dd></div>
         <div><dt>Active bookings</dt><dd>{{ allBookings.filter(b=>b.status==='confirmed').length }}</dd><dd class="staff-stat-note">Confirmed reservations</dd></div>
@@ -687,7 +740,8 @@
     <div class="container">
       <article class="reservation-receipt" aria-labelledby="reservation-success-heading">
         <header class="reservation-success-header">
-          <span class="reservation-success-icon" aria-hidden="true"><svg width="27" height="27" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><template v-if="lastBooking.status==='pending'"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></template><path v-else-if="lastBooking.status==='cancelled'" d="m6 6 12 12M6 18 18 6"/><path v-else d="m5 12 4 4L19 6"/></svg></span>
+          <span v-if="lastBooking.status==='confirmed' || lastBooking.status==='completed'" :ref="setPaymentSuccessIcon" class="reservation-success-icon payment-success-motion" aria-hidden="true"><svg viewBox="0 0 96 96" width="96" height="96"><circle class="payment-success-disc" cx="48" cy="48" r="34"/><circle class="payment-pulse-ring" cx="48" cy="48" r="34"/><path class="payment-draw-ring" d="M48 14 A34 34 0 1 1 48 82 A34 34 0 1 1 48 14"/><path class="payment-draw-check" d="m33 48 10 10 20-21"/><line v-for="tick in 8" :key="tick" class="payment-radial-tick" x1="48" y1="6" x2="48" y2="11" :transform="'rotate('+((tick-1)*45)+' 48 48)'"/></svg></span>
+          <span v-else class="reservation-success-icon" aria-hidden="true"><svg width="27" height="27" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><template v-if="lastBooking.status==='pending'"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></template><path v-else-if="lastBooking.status==='cancelled'" d="m6 6 12 12M6 18 18 6"/><path v-else d="m5 12 4 4L19 6"/></svg></span>
           <p class="reservation-success-kicker">{{ lastBooking.status==='pending' ? 'DEPOSIT REQUIRED' : lastBooking.status==='cancelled' ? 'RESERVATION CANCELLED' : 'RESERVATION CONFIRMED' }}</p>
           <h1 id="reservation-success-heading">{{ lastBooking.status==='pending' ? 'Your room is on hold.' : lastBooking.status==='cancelled' ? 'Reservation cancelled.' : 'Your stay is confirmed.' }}</h1>
           <p>{{ lastBooking.status==='pending' ? 'Pay the 50% deposit within 3 hours. Your booking is confirmed after staff verify the payment.' : lastBooking.status==='cancelled' ? 'This reservation is no longer holding a room.' : 'We look forward to welcoming you to the resort.' }}</p>
@@ -814,7 +868,7 @@
 
 
   <!-- ABOUT US -->
-  <div v-if="page==='about'" class="page">
+  <div v-if="browsingSections" id="section-about" data-scroll-section class="page">
     <section class="about-hero resort-about-hero" aria-labelledby="about-hero-heading">
       <div class="about-hero-inner">
         <div class="about-hero-copy">
@@ -959,7 +1013,22 @@
     </div>
   </div>
 
+  </div><!-- Page curtain -->
+  <div class="footer-reveal-space" :ref="setFooterReveal" aria-hidden="true"></div>
+  <footer class="accent-footer" :inert="!footerRevealed" aria-labelledby="accent-footer-heading">
+    <div class="accent-footer-top"><div><p class="accent-footer-kicker">A LITTLE CLOSER TO NATURE</p><h2 id="accent-footer-heading">Good days begin<br>at the farm.</h2><button type="button" class="accent-footer-cta" @click="navigate('rooms')">Find your next stay <span aria-hidden="true">↗</span></button></div><div class="accent-footer-links"><button type="button" @click="navigate('home')">Back to the top ↑</button><button type="button" @click="navigate('services')">Day visits &amp; services</button><button type="button" @click="navigate('about')">About the resort</button><a href="tel:+639666619229">0966 661 9229</a><a href="privacy.html">Privacy policy</a></div></div>
+    <div class="accent-footer-bottom"><span class="accent-footer-brand">Minnie's Farm Resort</span><div class="footer-socials" role="group" aria-label="Share the resort"><a class="footer-social-button" :href="'https://www.facebook.com/sharer/sharer.php?u='+footerShareUrl" target="_blank" rel="noopener noreferrer" aria-label="Share on Facebook (opens a new tab)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 21v-8h3l.5-4H14V7c0-1.2.4-2 2-2h2V1.5A25 25 0 0 0 15 1c-3 0-5 1.8-5 5v3H7v4h3v8Z"/></svg></a><a class="footer-social-button" :href="'https://wa.me/?text='+footerShareUrl" target="_blank" rel="noopener noreferrer" aria-label="Share on WhatsApp (opens a new tab)"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20.5 11.5a8.5 8.5 0 0 1-12.6 7.4L3 20.5l1.6-4.8a8.5 8.5 0 1 1 15.9-4.2Z"/><path d="M8 7.4c-.8 0-1.2 1-.8 2.3 1 2.8 3.1 4.9 5.9 5.8 1.3.5 2.3 0 2.4-.9l-2.5-1.3-.9 1a9 9 0 0 1-3.7-3.6l1-1L8 7.4Z"/></svg></a><a class="footer-social-button" :href="'mailto:?subject=A%20stay%20at%20Minnies%20Farm%20Resort&body='+footerShareUrl" aria-label="Share by email"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m4 7 8 6 8-6"/></svg></a></div><span>Matnog, Basud · Camarines Norte</span><span>© {{ new Date().getFullYear() }} Minnie's Farm Resort</span></div>
+  </footer>
 </div>
-<script src="assets/js/app.js?v=4.8"></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/gsap.min.js" integrity="sha384-HOvlOYPIs/zjoIkWUGXkVmXsjr8GuZLV+Q+rcPwmJOVZVpvTSXQChiN4t9Euv9Vc" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/DrawSVGPlugin.min.js" integrity="sha384-hk4mr+NXgJSfCJFF+LKzt26e6ZekZmmXAesF9r58nbaoAqB/VAlvY4T8k2plkXf+" crossorigin="anonymous"></script>
+<script src="assets/js/features/payment-success.js?v=1"></script>
+<script src="assets/js/features/liquid-tabs.js?v=1"></script>
+<script src="assets/js/features/pull-refresh.js?v=1"></script>
+<script src="assets/js/features/login-logo.js?v=1"></script>
+<script src="https://cdn.jsdelivr.net/npm/lenis@1.3.11/dist/lenis.min.js" integrity="sha384-kdY9hFBPoAPpxcrLihsO3APivFOxtQwSeYdzFD5CIIfLurwhdMrEHhkQxZJDkxgk" crossorigin="anonymous"></script>
+<script src="assets/js/features/section-navigation.js?v=1"></script>
+<script src="assets/js/features/onboarding-tour.js?v=1"></script>
+<script src="assets/js/app.js?v=4.21"></script>
 </body>
 </html>

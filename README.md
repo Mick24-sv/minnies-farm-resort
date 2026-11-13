@@ -56,7 +56,7 @@ The backend uses `SUPABASE_URL` and `SUPABASE_KEY` to communicate with Supabase.
 
 ## Deployment (Vercel)
 
-For manual deposits, payment verification, and walk-in counter bookings, follow [payment setup](docs/payment-setup.md), including the required SQL migration and receiving-account environment variables.
+For manual deposits, payment verification, and walk-in counter bookings, follow [payment setup](docs/setup/payment-setup.md), including the required SQL migration and receiving-account environment variables.
 This repo is designed to deploy to Vercel.
 
 - Requests to `/api/*` are routed to the Flask serverless function (`api/index.py`).
@@ -112,6 +112,8 @@ python api/index.py
 Then visit `http://localhost:5000/`. Flask serves the website from `public/` and the API from `/api`.
 
 ## Security notes
+
+See [the security hardening report](docs/security/README.md) for implemented protections, verification results, and remaining deployment requirements. The current backend dependencies require Python 3.10 or newer.
 - Do **not** commit `.env` files or any keys.
 - Do **not** put Supabase keys or JWT secrets directly into `public/assets/js/app.js` or `public/index.html`.
 - If Supabase RLS is enabled, ensure you have the correct policies for:
@@ -127,22 +129,37 @@ Minnies Resort/
     index.html            Main Vue interface
     privacy.html          Privacy policy
     assets/
-      css/style.css       Styles and responsive layout
-      js/app.js           Frontend behavior and API calls
+      css/
+        style.css         Shared layout and existing page styles
+        components/       Cards, navigation, footer, tour, and animation styles
+        pages/            Page-specific styles (profile settings)
+      js/
+        app.js            Vue state, API calls, and application entrypoint
+        features/         Navigation, animations, refresh, and tour modules
       images/             Logos and payment provider images
   api/
     index.py              Flask and Vercel entrypoint
     services/             Active payment, notification, and email modules
-    legacy/               Earlier implementation, retained for reference
     requirements.txt      Backend dependencies
-  docs/                   Setup and integration guides
-  tests/                  Local structure and routing checks
+  docs/
+    setup/                Payments, email, and notification setup
+    testing/              Verification results and limitations
+    deployment/           Deployment and GitHub review notes
+    design/               Asset source references
+  tests/
+    backend/              Flask API tests
+    frontend/             Browser and asset-structure checks
+  examples/
+    stillwell-booking/    Standalone booking/delete demo; separate from the resort
   .env                    Local secrets (ignored by Git)
+  .env.example            Empty configuration template
   requirements.txt        Deployment dependencies
   vercel.json             Hosting configuration
 ```
 
 Keep the Vercel project root at this repository root. `vercel.json` sets `public/` as the static output directory and preserves `/api/*` routing. Public addresses remain `/`, `/privacy.html`, and `/assets/...`.
+
+See the [documentation index](docs/README.md), [test instructions](tests/README.md), and [feature verification report](docs/testing/feature-verification.md). Standalone demos are documented in [examples](examples/README.md) and excluded from the resort deployment.
 
 - `public/index.html` — main UI
 - `public/assets/js/app.js` — Vue app logic + API calls
@@ -152,9 +169,9 @@ Keep the Vercel project root at this repository root. `vercel.json` sets `public
 
 ## Transaction notifications
 
-For password-reset and transaction emails, run the additional [email migration](database/migrations/20261025_email_delivery.sql) and follow [email setup](docs/email-setup.md).
+For password-reset and transaction emails, run the additional [email migration](database/migrations/20261025_email_delivery.sql) and follow [email setup](docs/setup/email-setup.md).
 
-Run [the notification migration](database/migrations/20261025_notifications.sql) after all payment/counter migrations, then restart Flask and refresh the browser. Staff and guests get a private notification inbox for new requests and transaction updates. See [notification setup and behavior](docs/notifications.md).
+Run [the notification migration](database/migrations/20261025_notifications.sql) after all payment/counter migrations, then restart Flask and refresh the browser. Staff and guests get a private notification inbox for new requests and transaction updates. See [notification setup and behavior](docs/setup/notifications.md).
 
 ## Troubleshooting
 

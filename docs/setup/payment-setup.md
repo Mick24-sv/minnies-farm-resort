@@ -2,7 +2,7 @@
 
 ## Required setup
 
-1. Run [the booking/payment migration](../database/migrations/20261025_booking_payments.sql) in the Supabase SQL Editor **before restarting or deploying this version**. It adds payment fields, a payment ledger, and transactional functions. Existing bookings remain unpaid in the application until staff record verified receipts; do not assume old bookings were never paid in real life.
+1. Run [the booking/payment migration](../../database/migrations/20261025_booking_payments.sql) in the Supabase SQL Editor **before restarting or deploying this version**. It adds payment fields, a payment ledger, and transactional functions. Existing bookings remain unpaid in the application until staff record verified receipts; do not assume old bookings were never paid in real life.
 2. The supplied MariBank QR is bundled at `public/assets/images/maribank-qr.png` and is available for room deposits and service payments. The original image is displayed without cropping and can be downloaded for payment on the same phone.
 
 GCash is enabled automatically when the original supplied QR is saved as `public/assets/images/gcash-qr.png`. The recipient label uses the masked name printed on the QR. An alternative local image path can be configured with:

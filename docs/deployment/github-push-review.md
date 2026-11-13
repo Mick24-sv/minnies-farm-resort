@@ -1,6 +1,6 @@
 # Before pushing to GitHub
 
-The exposure check found the current Supabase service-role key in earlier commits `193c1cd5`, `048ccfdd`, and `003eb5fc`, in historical versions of `api/index.py`. The key value is intentionally not reproduced here.
+Rechecked November 14, 2026: the current Supabase service-role key is present in commits `048ccfdd` and `003eb5fc`, in historical versions of `api/index.py`. The current key was not found in that file at `193c1cd5`. The key value is intentionally not reproduced here.
 
 Rotate/revoke that privileged credential in Supabase before publishing the history. Update the replacement `SUPABASE_KEY` in your local `.env` and Vercel environment, and redeploy. Revoke the old credential; deleting it from the newest file does not invalidate it. Never paste a replacement key into a tracked file.
 

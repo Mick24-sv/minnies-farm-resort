@@ -7,9 +7,9 @@ __pycache__/
 .vscode
 uploads/
 tests/
+examples/
 database/
 docs/
-api/legacy/
 *.pem
 *.key
 *.p12

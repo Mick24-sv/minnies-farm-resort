@@ -8,6 +8,9 @@ from flask_jwt_extended import JWTManager, create_access_token, jwt_required, ge
 from passlib.hash import pbkdf2_sha256
 import secrets
 import time
+import re
+import base64
+from datetime import timedelta
 from urllib.parse import quote
 
 try:
@@ -20,7 +23,17 @@ except Exception:
 app = Flask(__name__)
 # Increase max content length to 10MB to handle image uploads better on Vercel
 app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024
-CORS(app)
+try:
+    from .security import install_security, allowed_origins
+except ImportError:
+    from security import install_security, allowed_origins
+app.config['ALLOWED_ORIGINS'] = allowed_origins(os.getenv('FRONTEND_URL', ''), os.getenv('ALLOWED_ORIGINS', ''))
+CORS(app, resources={r'/api/*': {'origins': app.config['ALLOWED_ORIGINS']}},
+     allow_headers=['Authorization', 'Content-Type', 'Cache-Control', 'Pragma'],
+     methods=['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'])
+install_security(app)
+app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(minutes=15)
+app.config['JWT_TOKEN_LOCATION'] = ['headers']
 
 class VercelPathMiddleware:
     """WSGI middleware to restore original request path from Vercel rewrite parameter"""
@@ -65,6 +78,14 @@ SUPABASE_KEY = get_clean_env('SUPABASE_KEY')
 def public_user(user):
     """Only account fields intended for display can leave authentication routes."""
     return {key: user[key] for key in ('id', 'name', 'email', 'role', 'is_verified') if key in user}
+
+
+PUBLIC_ROOM_FIELDS = {'id', 'name', 'room_number', 'type', 'price_per_night', 'capacity', 'sqm', 'description', 'amenities', 'image_url', 'image_url_2', 'image_url_3', 'image_url_4', 'image_url_5', 'is_available', 'room_status', 'emoji', 'created_at'}
+PUBLIC_SERVICE_FIELDS = {'id', 'name', 'category', 'price', 'stock_quantity', 'description', 'is_active', 'image_url', 'emoji', 'created_at'}
+
+
+def public_record(row, fields):
+    return {key: value for key, value in row.items() if key in fields}
 
 
 # --- HELPERS ---
@@ -144,14 +165,11 @@ def _get_user_from_request():
     received_token = auth_header.split(' ')[1]
     user_id = None
     try:
-        from flask_jwt_extended import decode_token
-        decoded = decode_token(received_token)
-        user_id = decoded.get('sub') or decoded.get('identity')
+        from flask_jwt_extended import verify_jwt_in_request
+        verify_jwt_in_request()
+        user_id = get_jwt_identity()
     except Exception:
-        try:
-            user_id = get_jwt_identity()
-        except Exception:
-            user_id = None
+        return None
 
     if user_id is None:
         return None
@@ -161,41 +179,39 @@ def _get_user_from_request():
     except Exception:
         return None
 
-    users = supabase_req(f'users?id=eq.{user_id_int}&select=*')
+    if user_id_int <= 0:
+        return None
+    users = supabase_req(f'users?id=eq.{user_id_int}&select=id,name,email,role,is_verified')
     if not users:
         return None
     return users[0]
 
 # --- ROUTES ---
+def internal_error(error):
+    app.logger.warning("Request failed (%s)", type(error).__name__)
+    return jsonify(error="The request could not be completed. Please try again."), 500
+
 @app.after_request
 def add_header(response):
     # FORCE NO CACHE - ensures staff updates reflect immediately
-    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, public, max-age=0"
+    response.headers["Cache-Control"] = "private, no-store"
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
     return response
 
 @app.route('/api/health')
 def health():
-    return jsonify({
-        "status": "online",
-        "supabase_connected": bool(SUPABASE_URL and SUPABASE_KEY),
-        "jwt_configured": bool(os.getenv("JWT_SECRET_KEY")),
-        "env_check": {
-            "SUPABASE_URL": "configured" if bool(SUPABASE_URL) else "missing",
-            "SUPABASE_KEY": "configured" if bool(SUPABASE_KEY) else "missing",
-            "JWT_SECRET_KEY": "configured" if bool(os.getenv("JWT_SECRET_KEY")) else "missing"
-        }
-    })
+    return jsonify({'status': 'online'})
 
 @app.route('/api/auth/login', methods=['POST'])
 def login():
     try:
         data = request.get_json()
-        email = data.get('email', '').strip().lower()
+        email_value = data.get('email')
+        email = email_value.strip().lower() if isinstance(email_value, str) else ''
         password = data.get('password')
 
-        if not email or not isinstance(password, str) or not password:
+        if not email or len(email) > 254 or not isinstance(password, str) or not 1 <= len(password) <= 256:
             return jsonify({"error": "Invalid email or password."}), 401
 
         users = supabase_req(f'users?email=eq.{quote(email, safe="")}&select=*')
@@ -206,12 +222,12 @@ def login():
         user = users[0]
         stored_pw = user.get('password')
         
-        # Check password (handles both hashed and plain)
+        # Never authenticate a plaintext or malformed stored password.
         is_valid = False
         try:
             is_valid = pbkdf2_sha256.verify(password, stored_pw)
         except:
-            is_valid = (password == stored_pw)
+            is_valid = False
             
         if not is_valid:
             return jsonify({"error": "Invalid email or password."}), 401
@@ -219,26 +235,31 @@ def login():
         token = create_access_token(identity=str(user.get('id')))
         return jsonify({"token": token, "user": public_user(user)}), 200
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return internal_error(e)
 
 
 @app.route('/api/auth/register', methods=['POST'])
 def register():
     try:
         data = request.get_json() or {}
-        name = (data.get('name') or '').strip()
-        email = (data.get('email') or '').strip().lower()
+        name = data.get('name', '')
+        email = data.get('email', '')
+        if not isinstance(name, str) or not isinstance(email, str):
+            return jsonify(error='Enter a valid name and email.'), 400
+        name, email = name.strip(), email.strip().lower()
         password = data.get('password')
 
-        if not name or not email or not password:
-            return jsonify({"error": "'name', 'email', and 'password' are required."}), 400
+        if not 1 <= len(name) <= 100 or not re.fullmatch(r'[^\s@&?#]+@[^\s@&?#]+\.[^\s@&?#]+', email) or len(email) > 254 or not isinstance(password, str) or not 12 <= len(password) <= 256:
+            return jsonify(error='Enter a valid name, email, and a password with 12 to 256 characters.'), 400
 
         # check existing
-        existing = supabase_req(f'users?email=eq.{email}&select=id&limit=1')
+        existing = supabase_req(f'users?email=eq.{quote(email, safe="")}&select=id&limit=1')
+        if existing is None:
+            return jsonify(error='Registration is temporarily unavailable.'), 503
         if existing:
             return jsonify({"error": "Email is already registered."}), 409
 
-        hashed_pw = pbkdf2_sha256.hash(password)
+        hashed_pw = pbkdf2_sha256.using(rounds=600000).hash(password)
         user_data = {
             'name': name,
             'email': email,
@@ -248,12 +269,14 @@ def register():
         }
 
         created = supabase_req('users', method='POST', data=user_data)
-        user = created[0] if isinstance(created, list) and created else user_data
+        if not isinstance(created, list) or not created:
+            return jsonify(error='Could not create your account. Please try again.'), 503
+        user = created[0]
         user.pop('password', None)
 
         return jsonify({"message": "Account created! You can now sign in.", "user": public_user(user)}), 201
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return internal_error(e)
 
 
 @app.route('/api/auth/google', methods=['POST'])
@@ -263,8 +286,12 @@ def google_login():
         access_token = data.get('access_token')
         if not isinstance(access_token, str) or not access_token or len(access_token) > 4096:
             return jsonify({'error': 'A valid Google sign-in token is required.'}), 401
+        expected_client = get_clean_env('GOOGLE_CLIENT_ID') or '549203417668-bl1k05ionrenlhnukkui7b6hka24rbbe.apps.googleusercontent.com'
         # Identity must come from Google, never from email/name sent by the browser.
         try:
+            token_info = requests.get('https://oauth2.googleapis.com/tokeninfo', params={'access_token': access_token}, timeout=8)
+            if not token_info.ok or token_info.json().get('aud') != expected_client:
+                return jsonify(error='Google sign-in could not be verified.'), 401
             response = requests.get('https://www.googleapis.com/oauth2/v3/userinfo',
                                     headers={'Authorization': 'Bearer ' + access_token}, timeout=8)
             if not response.ok:
@@ -277,14 +304,16 @@ def google_login():
         email = str(identity['email']).strip().lower()
         name = identity.get('name') or email.split('@')[0]
 
-        users = supabase_req(f'users?email=eq.{email}&select=*')
+        users = supabase_req(f'users?email=eq.{quote(email, safe="")}&select=id,name,email,role,is_verified')
+        if users is None:
+            return jsonify(error='Google sign-in is temporarily unavailable.'), 503
         user = users[0] if users else None
 
         if not user:
             user_data = {
                 'name': name,
                 'email': email,
-                'password': pbkdf2_sha256.hash(secrets.token_urlsafe(32)),
+                'password': pbkdf2_sha256.using(rounds=600000).hash(secrets.token_urlsafe(32)),
                 'role': 'guest',
                 'is_verified': True
             }
@@ -294,7 +323,7 @@ def google_login():
         token = create_access_token(identity=str(user.get('id')))
         return jsonify({'token': token, 'user': public_user(user)}), 200
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return internal_error(e)
 
 @app.route('/api/rooms', methods=['GET', 'POST'])
 def handle_rooms():
@@ -305,6 +334,8 @@ def handle_rooms():
                 return jsonify({"error": "Staff access required."}), 403
         if request.method == 'POST':
             data = request.get_json()
+            room_fields = {'room_number', 'name', 'type', 'price_per_night', 'capacity', 'sqm', 'description', 'amenities', 'image_url', 'image_url_2', 'image_url_3', 'image_url_4', 'image_url_5', 'room_status', 'is_available'}
+            data = {key: value for key, value in data.items() if key in room_fields}
             # Handle amenities if it's a list
             if 'amenities' in data and isinstance(data['amenities'], list):
                 data['amenities'] = ", ".join(data['amenities'])
@@ -328,9 +359,9 @@ def handle_rooms():
                          room['amenities'] = [a.strip() for a in raw.split(',') if a.strip()]
                 elif not isinstance(raw, list):
                     room['amenities'] = []
-        return jsonify({"rooms": rooms or []}), 200
+        return jsonify({"rooms": [public_record(row, PUBLIC_ROOM_FIELDS) for row in (rooms or [])]}), 200
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return internal_error(e)
 
 @app.route('/api/services', methods=['GET', 'POST'])
 def handle_services():
@@ -340,6 +371,8 @@ def handle_services():
             if not user or user.get('role') != 'staff':
                 return jsonify({"error": "Staff access required."}), 403
             data = request.get_json()
+            service_fields = {'name', 'category', 'price', 'stock_quantity', 'description', 'is_active', 'image_url'}
+            data = {key: value for key, value in data.items() if key in service_fields}
             result = supabase_req('services', method='POST', data=data)
             if result is None:
                 return jsonify({"error": "Could not save this service. Please try again."}), 500
@@ -376,9 +409,9 @@ def handle_services():
             
             print(f"DEBUG: Guest view - active services found: {len(services) if services else 0}", flush=True)
             
-        return jsonify({"services": services if services is not None else []}), 200
+        return jsonify({"services": [public_record(row, PUBLIC_SERVICE_FIELDS) for row in (services or [])]}), 200
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return internal_error(e)
 
 import random
 import string
@@ -441,6 +474,14 @@ def handle_reviews():
 
             if room_id is None or rating is None:
                 return jsonify({"error": "room_id and rating are required."}), 400
+            if isinstance(room_id, bool) or not str(room_id).isdigit() or int(room_id) <= 0 or isinstance(booking_id, bool) or not str(booking_id).isdigit() or int(booking_id) <= 0:
+                return jsonify(error='A valid room and completed booking are required.'), 400
+            room_id, booking_id = int(room_id), int(booking_id)
+            owned = supabase_req(f'bookings?id=eq.{booking_id}&user_id=eq.{int(user["id"])}&room_id=eq.{room_id}&status=eq.completed&select=id&limit=1')
+            if not owned:
+                return jsonify(error='You may only review your own completed stay.'), 403
+            if review_text is not None and (not isinstance(review_text, str) or len(review_text) > 2000):
+                return jsonify(error='Review text must be at most 2000 characters.'), 400
 
             try:
                 rating_int = int(rating)
@@ -493,9 +534,14 @@ def handle_reviews():
             inserted = result[0] if isinstance(result, list) and result else payload
             inserted['guest_name'] = user.get('name')
             inserted['review'] = inserted.get('review') or inserted.get('comment') or ''
-            return jsonify({"message": "Review added", "review": inserted}), 201
+            safe_review = {key: inserted.get(key) for key in ('id', 'room_id', 'rating', 'created_at', 'guest_name', 'review')}
+            return jsonify({"message": "Review added", "review": safe_review}), 201
             
         room_id = request.args.get('room_id')
+        if room_id is not None:
+            if not room_id.isdigit() or int(room_id) <= 0:
+                return jsonify(error='Invalid room.'), 400
+            room_id = int(room_id)
         endpoints_to_try = []
         endpoints_to_try.append('reviews?select=*,users(name)&order=created_at.desc')
         endpoints_to_try.append('reviews?select=*&order=created_at.desc')
@@ -504,7 +550,7 @@ def handle_reviews():
         rows = []
         last_err = None
         for base in endpoints_to_try:
-            endpoint = base
+            endpoint = base + '&limit=100'
             if room_id:
                 endpoint += f'&room_id=eq.{room_id}'
             try:
@@ -516,7 +562,7 @@ def handle_reviews():
                 rows = []
 
         if last_err is not None:
-            print(f"Error fetching reviews after fallbacks: {last_err}", flush=True)
+            app.logger.warning("Review lookup failed (%s)", type(last_err).__name__)
 
         formatted = []
         total = 0
@@ -538,7 +584,8 @@ def handle_reviews():
                 guest_name = (user_info[0] or {}).get('name')
 
             formatted.append({
-                **r,
+                'id': r.get('id'), 'room_id': r.get('room_id'),
+                'rating': rating_num, 'created_at': r.get('created_at'),
                 'guest_name': r.get('guest_name') or guest_name or 'Guest',
                 'review': r.get('review') or r.get('comment') or ''
             })
@@ -551,7 +598,7 @@ def handle_reviews():
             "total_reviews": total
         }), 200
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return internal_error(e)
 
 @app.route('/api/auth/logout', methods=['POST'])
 def logout():
@@ -567,7 +614,26 @@ def get_me():
             return jsonify({"error": "User not found"}), 404
         return jsonify({"user": public_user(users[0])}), 200
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return internal_error(e)
+
+@app.route('/api/auth/profile', methods=['PATCH'])
+@jwt_required()
+def update_profile():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or set(data) != {'name'}:
+        return jsonify({'error': 'Only a profile name can be updated.'}), 400
+    name = data.get('name')
+    if not isinstance(name, str) or not 1 <= len(name.strip()) <= 100:
+        return jsonify({'error': 'Name must contain 1 to 100 characters.'}), 400
+    user_id = quote(str(get_jwt_identity()), safe='')
+    try:
+        updated = supabase_req(f'users?id=eq.{user_id}', method='PATCH', data={'name': name.strip()})
+        if not isinstance(updated, list) or not updated:
+            return jsonify({'error': 'Could not save your profile. Please try again.'}), 503
+        return jsonify({'user': public_user(updated[0])}), 200
+    except Exception:
+        return jsonify({'error': 'Could not save your profile. Please try again.'}), 503
+
 
 @app.route('/api/rooms/<int:room_id>', methods=['GET', 'PUT', 'DELETE'])
 def handle_single_room(room_id):
@@ -629,10 +695,10 @@ def handle_single_room(room_id):
             raw_amenities = room.get('amenities', '')
             if isinstance(raw_amenities, str):
                 room['amenities'] = [a.strip() for a in raw_amenities.split(',') if a.strip()]
-            return jsonify({"room": room}), 200
+            return jsonify({"room": public_record(room, PUBLIC_ROOM_FIELDS)}), 200
         return jsonify({"error": "Room not found"}), 404
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return internal_error(e)
 
 @app.route('/api/services/<int:service_id>', methods=['GET', 'PUT', 'DELETE'])
 def handle_single_service(service_id):
@@ -684,19 +750,31 @@ def handle_single_service(service_id):
             return jsonify({"message": "Service hidden. Request and payment history retained."}), 200
             
         service = supabase_req(f'services?id=eq.{service_id}&select=*')
-        return jsonify({"service": service[0] if service else None}), 200
+        if service and service[0].get('is_active') not in (True, 1, 'true', '1'):
+            viewer = _get_user_from_request()
+            if not viewer or viewer.get('role') != 'staff':
+                return jsonify(error='Service not found.'), 404
+        return jsonify({"service": public_record(service[0], PUBLIC_SERVICE_FIELDS) if service else None}), 200
     except Exception as e:
-        print(f"Service update error: {e}")
-        return jsonify({"error": str(e)}), 500
+        app.logger.warning("Service update failed (%s)", type(e).__name__)
+        return internal_error(e)
 
 @app.route('/api/rooms/upload-image', methods=['POST'])
 def upload_image():
     try:
+        user = _get_user_from_request()
+        if not user or user.get('role') != 'staff':
+            return jsonify(error='Staff access required.'), 403
         data = request.get_json()
         base64_image = data.get('image')
         
         if not base64_image:
             return jsonify({"error": "No image data provided"}), 400
+        if not isinstance(base64_image, str) or len(base64_image) > 2800000 or not re.fullmatch(r'data:image/(?:jpeg|png|webp);base64,[A-Za-z0-9+/=]+', base64_image):
+            return jsonify(error='Use a JPG, PNG or WebP image up to 2 MB.'), 400
+        raw = base64.b64decode(base64_image.split(',', 1)[1], validate=True)
+        if len(raw) > 2 * 1024 * 1024 or not (raw.startswith(b'\xff\xd8\xff') or raw.startswith(b'\x89PNG\r\n\x1a\n') or (raw.startswith(b'RIFF') and raw[8:12] == b'WEBP')):
+            return jsonify(error='Invalid image.'), 400
             
         # In a real app, we would upload this to Supabase Storage.
         # For now, we return the base64 string directly as the image URL 
@@ -706,7 +784,7 @@ def upload_image():
             "image_url": base64_image
         }), 200
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return internal_error(e)
 
 # --- FRONTEND STATIC & SPA FALLBACK ROUTES ---
 @app.route('/')
@@ -732,4 +810,4 @@ def serve_static(path):
 handler = app
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=False, host='127.0.0.1')
