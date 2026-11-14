@@ -500,6 +500,32 @@ const __app = createApp({
     const customerPaymentFormVisible = computed(() => currentUser.value?.role !== 'staff' && paymentBooking.value?.status === 'pending' && paymentBooking.value?.payment_review_status !== 'pending_review' && (!savedServiceCounterChoice.value || editingServicePaymentMethod.value));
     const walkInKind = ref('booking');
     const paymentHistory = ref([]);
+    const customerReceipt = ref(null);
+    let receiptDialog = null, receiptTrigger = null;
+    const receiptAvailable = computed(() => paymentHistory.value.some(p => Number(p.amount) > 0));
+    watch(token, () => { customerReceipt.value = null; });
+    function setReceiptDialog(element) {
+      receiptDialog = element;
+      if (element && !element.open) element.showModal();
+    }
+    function closeCustomerReceipt() {
+      customerReceipt.value = null;
+      nextTick(() => receiptTrigger?.isConnected && receiptTrigger.focus({ preventScroll: true }));
+    }
+    function viewCustomerReceipt() {
+      if (!receiptAvailable.value || !paymentBooking.value || paymentBusy.value) return;
+      receiptTrigger = document.activeElement;
+      const booking = paymentBooking.value;
+      const payments = paymentHistory.value.filter(p => Number(p.amount) > 0).map(p => ({ ...p }));
+      const received = payments.reduce((sum, p) => sum + Math.round(Number(p.amount) * 100), 0) / 100;
+      customerReceipt.value = {
+        ...booking, kind: paymentKind.value, payments, received,
+        customer: booking.guest_name || booking.walk_in_guest_name || (currentUser.value?.role !== 'staff' ? currentUser.value?.name : '') || 'Guest',
+        room: paymentKind.value === 'service' ? booking.room : booking.room_name || booking.room, total: Number(booking.total || booking.total_price || 0),
+        balance: Number(booking.balance_due || 0),
+      };
+    }
+    function printCustomerReceipt() { if (customerReceipt.value && receiptDialog?.open) window.print(); }
     const showPaymentDialog = ref(false);
     const showWalkInDialog = ref(false);
     const paymentBusy = ref(false);
@@ -591,7 +617,7 @@ const __app = createApp({
         const data = await paymentApi(`${kind === 'service' ? '/services/avails' : '/bookings'}/${booking.id}`);
         if (session !== token.value || !currentUser.value) return false;
         const record = kind === 'service' ? data.avail : data.booking;
-        paymentBooking.value = kind === 'service' ? serviceReceipt(record) : bookingReceipt({ ...record, room: booking.room }); paymentHistory.value = data.payments || [];
+        paymentBooking.value = kind === 'service' ? serviceReceipt(record) : bookingReceipt({ ...record, room: record.room_name || booking.room }); paymentHistory.value = data.payments || [];
         if (kind === 'booking' && lastBooking.value.id === record.id) lastBooking.value = { ...paymentBooking.value };
         paymentForm.value = { method: record.requested_payment_method || record.submitted_payment_method || (currentUser.value?.role === 'staff' ? 'cash' : paymentOptions.value.accounts[0]?.method || (kind === 'service' ? 'cash' : 'gcash')), reference: record.payment_review_status === 'pending_review' ? record.submitted_payment_reference || '' : '',
           proof: '', amount: record.deposit_due > 0 ? record.deposit_due : record.balance_due, verified: false, note: '' };
@@ -866,16 +892,32 @@ const __app = createApp({
     });
 
     const upcomingBookings = computed(() => {
-      return allBookings.value.filter(b => (b.check_in || b.check_in_date) >= today && b.status !== 'cancelled' && b.status !== 'completed');
+      return allBookings.value.filter(b => !historyHidden(b) && (b.check_in || b.check_in_date) >= today && b.status !== 'cancelled' && b.status !== 'completed');
     });
 
     const pastBookings = computed(() => {
-      return allBookings.value.filter(b => (b.check_in || b.check_in_date) < today || b.status === 'cancelled' || b.status === 'completed');
+      return allBookings.value.filter(b => !historyHidden(b) && ((b.check_in || b.check_in_date) < today || b.status === 'cancelled' || b.status === 'completed'));
     });
 
+    function historyHidden(record) { return !!record.hidden_from_history && ['completed', 'cancelled'].includes(record.status); }
+    const hiddenBookings = computed(() => allBookings.value.filter(historyHidden));
+    const historyBusy = ref('');
+    async function setHistoryVisibility(record, kind, hidden) {
+      if (historyBusy.value || currentUser.value?.role !== 'guest') return;
+      const session = token.value;
+      historyBusy.value = kind + '-' + record.id;
+      try {
+        await paymentApi('/history/' + kind + '/' + record.id, { hidden });
+        if (session !== token.value) return;
+        const source = kind === 'booking' ? allBookings : serviceAvails;
+        source.value = source.value.map(item => item.id === record.id ? { ...item, hidden_from_history: hidden } : item);
+        showToast(hidden ? 'Hidden from your history. Restore it in Hidden anytime.' : 'Restored to your history.', 'success');
+      } catch (error) { if (session === token.value) showToast(error.message, 'error'); }
+      finally { historyBusy.value = ''; }
+    }
     const guestBookingPage = ref(1);
     const guestBookingPageSize = 3;
-    const activeGuestBookings = computed(() => dashTab.value === 'upcoming' ? upcomingBookings.value : pastBookings.value);
+    const activeGuestBookings = computed(() => dashTab.value === 'hidden' ? hiddenBookings.value : dashTab.value === 'upcoming' ? upcomingBookings.value : pastBookings.value);
     const guestBookingPageCount = computed(() => Math.max(1, Math.ceil(activeGuestBookings.value.length / guestBookingPageSize)));
     const guestBookingRangeStart = computed(() => activeGuestBookings.value.length ? (guestBookingPage.value - 1) * guestBookingPageSize + 1 : 0);
     const guestBookingRangeEnd = computed(() => Math.min(guestBookingPage.value * guestBookingPageSize, activeGuestBookings.value.length));
@@ -888,13 +930,17 @@ const __app = createApp({
       document.getElementById('guest-bookings-heading')?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block: 'start' });
     }
 
+    const guestServiceFilter = ref('visible');
+    const hiddenServices = computed(() => serviceAvails.value.filter(historyHidden));
+    const visibleGuestServices = computed(() => serviceAvails.value.filter(a => !historyHidden(a)));
+    const activeGuestServices = computed(() => guestServiceFilter.value === 'hidden' ? hiddenServices.value : visibleGuestServices.value);
     const guestServicePage = ref(1);
     const guestServicePageSize = 3;
-    const guestServicePageCount = computed(() => Math.max(1, Math.ceil(serviceAvails.value.length / guestServicePageSize)));
-    const guestServiceRangeStart = computed(() => serviceAvails.value.length ? (guestServicePage.value - 1) * guestServicePageSize + 1 : 0);
-    const guestServiceRangeEnd = computed(() => Math.min(guestServicePage.value * guestServicePageSize, serviceAvails.value.length));
-    const pagedGuestServices = computed(() => serviceAvails.value.slice((guestServicePage.value - 1) * guestServicePageSize, guestServicePage.value * guestServicePageSize));
-    watch(currentUser, () => { guestServicePage.value = 1; }, { flush: 'sync' });
+    const guestServicePageCount = computed(() => Math.max(1, Math.ceil(activeGuestServices.value.length / guestServicePageSize)));
+    const guestServiceRangeStart = computed(() => activeGuestServices.value.length ? (guestServicePage.value - 1) * guestServicePageSize + 1 : 0);
+    const guestServiceRangeEnd = computed(() => Math.min(guestServicePage.value * guestServicePageSize, activeGuestServices.value.length));
+    const pagedGuestServices = computed(() => activeGuestServices.value.slice((guestServicePage.value - 1) * guestServicePageSize, guestServicePage.value * guestServicePageSize));
+    watch([currentUser, guestServiceFilter], () => { guestServicePage.value = 1; }, { flush: 'sync' });
     watch(guestServicePageCount, count => { guestServicePage.value = Math.min(guestServicePage.value, count); }, { flush: 'sync' });
     async function changeGuestServicePage(direction) {
       guestServicePage.value = Math.max(1, Math.min(guestServicePageCount.value, guestServicePage.value + direction));
@@ -1985,6 +2031,7 @@ const __app = createApp({
       today, currentUser, token, loginForm, regForm, showLoginPw, showRegPw, showRegConfirmPw, rooms, filters, selectedRoom,
       bookingForm, bookingTimesValid, formatGuestTime, roomForm, lastBooking, allBookings, features, teamMembers, faqs,
       filteredRooms, bookingNights, bookingTotal, upcomingBookings, pastBookings,
+      hiddenBookings, historyBusy, historyHidden, setHistoryVisibility, guestServiceFilter, hiddenServices, visibleGuestServices, activeGuestServices,
       guestBookingPage, guestBookingPageCount, guestBookingRangeStart, guestBookingRangeEnd, activeGuestBookings, pagedGuestBookings, changeGuestBookingPage,
       guestServicePage, guestServicePageCount, guestServiceRangeStart, guestServiceRangeEnd, pagedGuestServices, changeGuestServicePage,
       navigate, doLogin, doRegister, logout, googleLogin, doForgotPassword, doResetPassword,
@@ -2035,6 +2082,7 @@ const __app = createApp({
       actionDialogBusy, closeActionDialog, handleActionDialogKeydown,
       toasts,
       paymentOptions, paymentBooking, paymentHistory, showPaymentDialog, showWalkInDialog, paymentBusy, paymentError, paymentPhotoReading, paymentForm,
+      customerReceipt, receiptAvailable, setReceiptDialog, closeCustomerReceipt, viewCustomerReceipt, printCustomerReceipt,
       walkInForm, walkInRoom, walkInTotal, bookingMoney, paymentStatusLabel, paymentDeadline, openPaymentDialog, readPaymentProof, saveBookingPayment,
       openWalkInDialog, saveWalkIn, closePaymentDialogs, paymentDialogKeydown,
       paymentOptionsLoading, paymentOptionsError, fetchPaymentOptions,

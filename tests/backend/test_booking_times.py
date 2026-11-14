@@ -76,10 +76,10 @@ class BookingTimesTest(unittest.TestCase):
     def test_times_are_in_list_projection_only_after_activation(self, rpc):
         rpc.return_value=Mock(ok=True,content=b'null',json=lambda:None)
         self.client.get('/api/bookings')
-        self.assertIn('check_in_time,check_out_time',self.queries[-1])
+        self.assertIn('check_in_time,check_out_time',next(q for q in reversed(self.queries) if q.startswith('bookings?')))
         self.env['BOOKING_TIMES_ENABLED']='0'
         self.client.get('/api/bookings')
-        self.assertNotIn('check_in_time',self.queries[-1])
+        self.assertNotIn('check_in_time',next(q for q in reversed(self.queries) if q.startswith('bookings?')))
 
     def test_customer_cannot_create_staff_walkin(self):
         response=self.client.post('/api/bookings',json={**self.payload,'booking_source':'walk_in','payment_received':True})

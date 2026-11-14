@@ -1,6 +1,8 @@
 # Documentation
 
 - [Payment setup](setup/payment-setup.md)
+- [Customer payment receipts](setup/customer-receipts.md)
+- [Hide and restore customer history](setup/customer-history.md)
 - [Customer arrival and departure times: database activation](setup/booking-times.md)
 - [Email setup](setup/email-setup.md)
 - [Notifications](setup/notifications.md)

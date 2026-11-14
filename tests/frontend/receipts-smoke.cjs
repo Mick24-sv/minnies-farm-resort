@@ -1,0 +1,42 @@
+// Start Flask on port 5000. Every API response is mocked; no live writes.
+const {chromium}=require(process.env.PLAYWRIGHT_PATH || 'playwright');
+const assert=require('node:assert/strict');
+(async()=>{const browser=await chromium.launch({channel:'msedge',headless:true});try{
+  const page=await browser.newPage({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
+  let paid=true;
+  const errors=[];page.on('pageerror',e=>errors.push(e.message));
+  const user={id:7,name:'Ana <img src=x> Reyes',role:'guest'};
+  const room={id:1,user_id:7,room_id:1,guest_name:user.name,room_name:'Garden Room',reference_code:'MFR-1',status:'confirmed',check_in:'2035-06-01',check_out:'2035-06-02',check_in_time:'14:30',check_out_time:'09:15',guest_count:2,total_price:2200,amount_paid:1100,balance_due:1100,payment_status:'partial'};
+  await page.route('**/api/**',route=>{
+    const pathname=new URL(route.request().url()).pathname;
+    const payments=paid?[{id:3,amount:1100,method:'cash',reference:'QA-verified',created_at:'2026-11-14T01:00:00Z'}]:[];
+    let data={rooms:[],services:[],avails:[],bookings:[],accounts:[],notifications:[],configured:true};
+    if(pathname.endsWith('/me'))data={user};
+    else if(pathname==='/api/bookings/1')data={booking:{...room,...(!paid?{amount_paid:0,balance_due:2200,payment_status:'unpaid',status:'pending'}:{})},payments};
+    else if(pathname==='/api/services/avails/1')data={avail:{...room,reference_code:'MFS-1',service_name:'Day service',quantity:2,total_price:1100,amount_paid:1100,balance_due:0,payment_status:'paid'},payments};
+    return route.fulfill({json:data});
+  });
+  await page.addInitScript(()=>sessionStorage.setItem('token','qa'));
+  await page.goto('http://127.0.0.1:5000');
+  await page.waitForSelector('#main-navigation [data-section="dashboard"]',{state:'attached'});
+  const open=kind=>page.evaluate(kind=>__app._container._vnode.component.proxy.openPaymentDialog({id:1,room:'Garden Room'},kind),kind);
+  await open('booking');await page.getByRole('button',{name:'View receipt',exact:true}).tap();
+  const receipt=page.locator('.customer-receipt-dialog[open]');await receipt.waitFor();
+  const text=await receipt.innerText();
+  assert.ok(text.includes('Ana <img src=x> Reyes'));assert.equal(await receipt.locator('img').count(),1,'customer text must not become HTML');
+  assert.match(text,/Partial payment received/);assert.ok(text.includes('\u20b11,100.00'));assert.match(text,/2:30 PM PHT/);assert.match(text,/RP-3/);
+  assert.ok((await receipt.boundingBox()).width<=390);
+  await page.emulateMedia({media:'print'});
+  assert.equal(await page.locator('#app').evaluate(e=>getComputedStyle(e).display),'none');
+  assert.equal(await page.locator('.customer-receipt-actions').evaluate(e=>getComputedStyle(e).display),'none');
+  const pdf=await page.pdf({format:'A4'});assert.ok(pdf.length>1000);
+  await page.emulateMedia({media:'screen'});
+  await page.getByRole('button',{name:'Close receipt',exact:true}).tap();
+  await page.getByRole('button',{name:'Close payment details',exact:true}).tap();
+  await open('service');await page.getByRole('button',{name:'View receipt',exact:true}).tap();
+  assert.match(await receipt.innerText(),/Day service/);assert.match(await receipt.innerText(),/Fully paid/);assert.match(await receipt.innerText(),/SP-3/);
+  await page.getByRole('button',{name:'Close receipt',exact:true}).tap();
+  await page.getByRole('button',{name:'Close payment details',exact:true}).tap();
+  paid=false;await open('booking');assert.equal(await page.getByRole('button',{name:'View receipt',exact:true}).count(),0);
+  assert.deepEqual(errors,[]);console.log('PASS: room deposit receipt, paid service receipt, escaped customer text, mobile layout, print-only receipt, PDF generation, and no receipt for unverified payments.');
+}finally{await browser.close()}})().catch(e=>{console.error(e);process.exit(1)});

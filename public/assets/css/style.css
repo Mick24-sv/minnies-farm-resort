@@ -1,4 +1,12 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+.modal-overlay.forgot-password-overlay { align-items: center; justify-content: center; height: 100dvh; padding: 20px; }
+.forgot-password-overlay > .modal { max-height: calc(100dvh - 40px); overflow-y: auto; border-radius: 16px; }
+.forgot-password-overlay input { font-size: 16px; }
+@media (max-width: 768px) { .guest-account-nav .guest-logout { display: none; } }
+.detail-booking-times > div { min-width: 0; }
+.detail-booking-times input[type="time"] { max-width: 100%; -webkit-appearance: none; appearance: none; }
+.detail-booking-times input[type="time"]::-webkit-date-and-time-value { text-align: left; min-height: 1.2em; }
+@media (max-width: 768px) { .detail-booking-times input[type="time"] { font-size: 16px; } }
 .detail-booking-times{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:16px 0}.detail-booking-times label{display:block;font-size:11px;color:#6a795a;margin-bottom:8px}.detail-booking-times input{display:block;width:100%;min-width:0;padding:12px 10px;border:1px solid #d7dfcb;border-radius:6px;background:#f6f8f1;color:#30492f;font:400 13px 'DM Sans',sans-serif;min-height:44px}.detail-booking-times input:disabled{opacity:.5;cursor:not-allowed}.detail-booking-times input:focus-visible{outline:2px solid #9bb57b;outline-offset:2px}.booking-selected-time{display:block;margin-top:5px;font-size:11px;font-weight:400;color:#7c8b6d;line-height:1.5}
 
     /* Keep account notifications immediately before the sign-out action. */
@@ -9,7 +17,7 @@
     .notification-control-mobile { display: none; }
     nav > .nav-links { order: 1; margin-left: auto; }
     nav > .mobile-menu-btn { order: 3; }
-    .notification-bell { position: relative; display: grid; place-items: center; width: 44px; height: 44px; border: 1px solid #ffffff36; border-radius: 50%; background: transparent; color: #f5f0e8; cursor: pointer; }
+    .notification-bell { position: relative; display: grid; place-items: center; width: 44px; height: 44px; border: 0; border-radius: 8px; background: transparent; color: #f5f0e8; cursor: pointer; }
     .notification-bell:hover, .notification-bell[aria-expanded="true"] { background: #ffffff14; border-color: #c9a84c; }
     .notification-count { position: absolute; top: -5px; right: -5px; min-width: 20px; height: 20px; padding: 2px 5px; border: 2px solid #1a2e2a; border-radius: 12px; background: #d7ba65; color: #162d26; font: 600 10px/12px 'DM Sans', sans-serif; }
     .notification-backdrop { position: fixed; inset: 64px 0 0; z-index: 110; border: 0; background: #10251d25; cursor: default; }

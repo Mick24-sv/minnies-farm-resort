@@ -6,8 +6,10 @@ from decimal import Decimal
 from flask import jsonify, request
 try:
     from .booking_payments import BookingError, decorate_booking
+    from .history_visibility import annotate_history
 except ImportError:
     from booking_payments import BookingError, decorate_booking
+    from history_visibility import annotate_history
 
 
 def service_receipt(row, include_proof=False):
@@ -68,7 +70,8 @@ def install_service_payment_routes(app, db, rpc, actor, handled, env):
         endpoint = f'service_avails?select={fields}&order=availed_at.desc'
         if user.get('role') != 'staff':
             endpoint += f'&user_id=eq.{int(user["id"])}'
-        return jsonify({'avails': [service_receipt(row) for row in db(endpoint)]})
+        rows = annotate_history(db(endpoint), user, 'service', db)
+        return jsonify({'avails': [service_receipt(row) for row in rows]})
 
     @app.route('/api/services/avails/<int:avail_id>', methods=['GET','PATCH','DELETE'])
     @handled

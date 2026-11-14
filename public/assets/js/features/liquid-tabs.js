@@ -1,6 +1,22 @@
 window.createLiquidTabs = function () {
   let root, indicator, observer, resizeObserver, animation, lastTab, frame;
   const media = window.matchMedia('(prefers-reduced-motion: reduce)');
+  let scrollAnchor = 0;
+  function showTabs() {
+    root?.classList.remove('is-scroll-hidden');
+    if (root) root.inert = false;
+    scrollAnchor = Math.max(0, window.scrollY);
+  }
+  function scroll() {
+    if (!root || window.innerWidth > 768 || document.body.style.overflow === 'hidden') return;
+    const y = Math.max(0, Math.min(window.scrollY, document.documentElement.scrollHeight - window.innerHeight));
+    const delta = y - scrollAnchor;
+    if (Math.abs(delta) < 12) return;
+    const hidden = delta < 0 && !root.contains(document.activeElement);
+    root.classList.toggle('is-scroll-hidden', hidden);
+    root.inert = hidden;
+    scrollAnchor = y;
+  }
   function position(animate = true) {
     if (!root || !root.getClientRects().length) return;
     const tab = root.querySelector('[aria-current="page"]');
@@ -27,12 +43,13 @@ window.createLiquidTabs = function () {
     }
     lastTab = tab;
   }
-  function sync() { cancelAnimationFrame(frame); frame = requestAnimationFrame(() => position(true)); }
-  function resize() { cancelAnimationFrame(frame); frame = requestAnimationFrame(() => position(false)); }
+  function sync() { showTabs(); cancelAnimationFrame(frame); frame = requestAnimationFrame(() => position(true)); }
+  function resize() { showTabs(); cancelAnimationFrame(frame); frame = requestAnimationFrame(() => position(false)); }
   return function setLiquidTabs(element) {
     if (element === root) return;
     observer?.disconnect(); resizeObserver?.disconnect(); animation?.cancel(); cancelAnimationFrame(frame);
     window.removeEventListener('resize', resize); media.removeEventListener('change', resize);
+    window.removeEventListener('scroll', scroll);
     root = element; lastTab = null;
     if (!root) return;
     indicator = root.querySelector('.liquid-tab-indicator');
@@ -40,6 +57,7 @@ window.createLiquidTabs = function () {
     observer.observe(root, { subtree: true, attributes: true, attributeFilter: ['aria-current'] });
     if ('ResizeObserver' in window) { resizeObserver = new ResizeObserver(resize); resizeObserver.observe(root); }
     window.addEventListener('resize', resize); media.addEventListener('change', resize);
+    window.addEventListener('scroll', scroll, { passive: true });
     resize();
   };
 };

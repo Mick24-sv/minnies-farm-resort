@@ -1,6 +1,8 @@
 .mobile-bottom-tabs{display:none}
+.mobile-bottom-tabs{transition:transform .24s ease,opacity .24s ease}
+.mobile-bottom-tabs.is-scroll-hidden{transform:translateY(calc(100% + 24px + env(safe-area-inset-bottom,0px)));opacity:0;pointer-events:none}
 @media(max-width:768px){
-  body{padding-bottom:calc(82px + env(safe-area-inset-bottom,0px))}
+  .site-curtain{padding-bottom:calc(82px + env(safe-area-inset-bottom,0px))}
   .mobile-bottom-tabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));position:fixed;left:12px;right:12px;bottom:calc(10px + env(safe-area-inset-bottom,0px));height:64px;padding:6px;z-index:90;background:#fffdf8f5;border:1px solid #dfe4d6;border-radius:22px;box-shadow:0 6px 28px #17392a20;backdrop-filter:blur(16px);isolation:isolate}
   .mobile-bottom-tabs button{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;min-width:0;min-height:48px;padding:4px 0;border:0;background:none;color:#8c9583;font:500 9px 'DM Sans',sans-serif;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:color .2s ease}
   .mobile-bottom-tabs button[aria-current="page"]{color:#365837}
@@ -8,4 +10,4 @@
   .mobile-bottom-tabs svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
   .liquid-tab-indicator{position:absolute;top:6px;height:50px;left:10px;width:0;opacity:0;border-radius:17px;background:#e7eedb;pointer-events:none;z-index:0;transform-origin:center}
 }
-@media(prefers-reduced-motion:reduce){.mobile-bottom-tabs button{transition:none}}
+@media(prefers-reduced-motion:reduce){.mobile-bottom-tabs,.mobile-bottom-tabs button{transition:none}}

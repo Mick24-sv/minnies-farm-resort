@@ -1,5 +1,8 @@
 {
   "version": 2,
+  "env": {
+    "BOOKING_TIMES_ENABLED": "1"
+  },
   "outputDirectory": "public",
   "rewrites": [
     {

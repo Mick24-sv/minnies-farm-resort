@@ -8,8 +8,10 @@ import requests
 from flask import jsonify, request
 try:
     from .booking_times import validate_booking_times
+    from .history_visibility import annotate_history, install_history_routes
 except ImportError:
     from booking_times import validate_booking_times
+    from history_visibility import annotate_history, install_history_routes
 
 
 class BookingError(Exception):
@@ -19,6 +21,7 @@ class BookingError(Exception):
 
 
 ERRORS = {
+    'HISTORY_ACTIVE': ('Only completed or cancelled records can be hidden.', 409),
     'BOOKING_UNAUTHORIZED': ('Please sign in again.', 401),
     'BOOKING_FORBIDDEN': ('You do not have access to this action.', 403),
     'BOOKING_NOT_FOUND': ('The room or reservation could not be found.', 404),
@@ -148,6 +151,7 @@ def install_booking_routes(app, query, get_user, env):
             if user.get('role') != 'staff':
                 endpoint += f'&user_id=eq.{int(user["id"])}'
             rows = db(endpoint)
+            rows = annotate_history(rows, user, 'booking', db)
             return jsonify({'bookings': [decorate_booking(row) for row in rows]})
         data = request.get_json() or {}
         source = data.get('booking_source', 'online')
@@ -190,6 +194,10 @@ def install_booking_routes(app, query, get_user, env):
         user = actor()
         rpc('resort_expire_holds')
         row = owned_booking(booking_id, user)
+        guests = db(f'users?id=eq.{int(row["user_id"])}&select=name') if row.get('user_id') else []
+        rooms = db(f'rooms?id=eq.{int(row["room_id"])}&select=name') if row.get('room_id') else []
+        row = {**row, 'guest_name': row.get('walk_in_guest_name') or (guests[0].get('name') if guests else '') or 'Guest',
+               'room_name': (rooms[0].get('name') if rooms else '') or 'Room'}
         payments = db(f'booking_payments?booking_id=eq.{booking_id}&select=id,amount,method,reference,created_at&order=created_at.asc')
         return jsonify({'booking': decorate_booking(row, include_proof=True), 'payments': payments})
 
@@ -259,4 +267,5 @@ def install_booking_routes(app, query, get_user, env):
     except ImportError:
         from notifications import install_notification_routes
     install_notification_routes(app, rpc, actor, handled)
+    install_history_routes(app, rpc, actor, handled, BookingError)
     return rpc

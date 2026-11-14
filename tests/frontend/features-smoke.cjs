@@ -194,6 +194,7 @@ const { pathToFileURL } = require('node:url');
     await state(() => { const vm = __app._container._vnode.component.proxy; vm.currentUser = { ...vm.currentUser, role: 'guest' }; vm.navigate('dashboard'); });
     for (const width of [1440, 390]) {
       await page.setViewportSize({ width, height: 1000 });
+      if (width <= 1100) await page.locator('.mobile-menu-btn').click();
       const help = page.getByRole('button', { name: 'Customer guide', exact: true });
       assert.ok(await help.isVisible());
       assert.equal(await help.innerText(), '');
@@ -213,6 +214,7 @@ const { pathToFileURL } = require('node:url');
     }
     await state(() => { const vm = __app._container._vnode.component.proxy; vm.currentUser = null; vm.navigate('auth'); });
     await page.setViewportSize({ width: 900, height: 1000 });
+    await page.locator('.mobile-menu-btn').click();
     await page.getByRole('button', { name: 'Customer guide', exact: true }).click();
     for (let n = 0; n < 5; n++) await page.locator('[data-next]').click();
     await page.waitForSelector('.onboarding-tour', { state: 'detached' });

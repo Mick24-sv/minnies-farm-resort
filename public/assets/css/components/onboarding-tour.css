@@ -1,11 +1,10 @@
 .onboarding-tour{position:fixed;inset:0;margin:0;padding:0;border:0;width:100vw;height:100dvh;max-width:none;max-height:none;background:transparent;color:#2b4130;overflow:hidden;font-family:'DM Sans',sans-serif;outline:none}
 .onboarding-tour::backdrop{background:transparent}
-.tour-launch-button{display:grid;place-items:center;flex-shrink:0;width:38px;height:38px;margin-left:0;border:1px solid #ffffff30;border-radius:50%;background:transparent;color:#dfca89;cursor:pointer;transition:background .18s,border-color .18s}
-.tour-launch-mobile{display:none}
+.tour-launch-button{display:grid;place-items:center;flex-shrink:0;width:44px;height:44px;margin-left:0;border:0;border-radius:8px;background:transparent;color:#dfca89;cursor:pointer;transition:background .18s}
 .tour-launch-button svg{width:21px;height:21px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
 .tour-launch-button:hover{background:#c9a84c20;border-color:#c9a84c88}
 .tour-launch-button:focus-visible{outline:2px solid #e8c96a;outline-offset:3px}
-@media(max-width:1100px){.tour-launch-desktop{display:none}.tour-launch-mobile{display:grid;order:2;margin-left:auto;margin-right:10px;width:36px;height:36px}.notification-control-mobile~.tour-launch-mobile{margin-left:0}nav>.mobile-menu-btn{order:3}}
+@media(max-width:1100px){.nav-account-actions>.tour-launch-button{margin-right:auto}nav>.mobile-menu-btn{order:3}}
 .tour-spotlight{position:absolute;border-radius:12px;box-shadow:0 0 0 9999px #14241dcc;outline:1px solid #eff8dc99;pointer-events:none}
 .tour-card{position:absolute;background:#fffdf8;border:1px solid #e1e6d7;border-radius:14px;box-shadow:0 20px 65px #10251d40;padding:21px;max-height:calc(100dvh - 32px);overflow:auto}
 .onboarding-tour.is-moving .tour-spotlight{transition:left 640ms cubic-bezier(.22,.8,.2,1),top 640ms cubic-bezier(.22,.8,.2,1),width 640ms cubic-bezier(.22,.8,.2,1),height 640ms cubic-bezier(.22,.8,.2,1)}
