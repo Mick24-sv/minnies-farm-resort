@@ -279,6 +279,11 @@
               <div class="form-group"><label for="register-confirm">Confirm password</label><div class="auth-password"><input id="register-confirm" minlength="12" maxlength="256" :type="showRegConfirmPw ? 'text' : 'password'" v-model="regForm.confirm" autocomplete="new-password" placeholder="Repeat your password" required /><button type="button" class="auth-password-toggle" @click="showRegConfirmPw=!showRegConfirmPw" :aria-label="showRegConfirmPw ? 'Hide confirmation password' : 'Show confirmation password'" :aria-pressed="showRegConfirmPw"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/><path v-if="showRegConfirmPw" d="m3 3 18 18"/></svg></button></div></div>
             </div>
             <button type="submit" class="auth-submit" :disabled="loading"><span>{{ loading ? 'Creating account…' : 'Create account' }}</span><span v-if="!loading" aria-hidden="true">&rarr;</span></button>
+            <div class="auth-divider"><span>or continue with</span></div>
+            <button type="button" class="auth-google" @click="googleLogin" :disabled="loading">
+              <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#4285F4" d="M43.6 24.5c0-1.4-.1-2.8-.4-4.1H24v7.8h11c-.5 2.5-1.9 4.6-4.1 6v5h6.6c3.9-3.6 6.1-8.7 6.1-14.7Z"/><path fill="#34A853" d="M24 44c5.5 0 10.1-1.8 13.5-4.8l-6.6-5c-1.8 1.2-4.1 1.9-6.9 1.9-5.3 0-9.8-3.6-11.4-8.4H5.8v5.2A20.4 20.4 0 0 0 24 44Z"/><path fill="#FBBC05" d="M12.6 27.7a12.2 12.2 0 0 1 0-7.4v-5.2H5.8a20 20 0 0 0 0 17.8Z"/><path fill="#EA4335" d="M24 11.9c3 0 5.7 1 7.8 3l5.8-5.8A19.6 19.6 0 0 0 24 4 20.4 20.4 0 0 0 5.8 15.1l6.8 5.2c1.6-4.8 6.1-8.4 11.4-8.4Z"/></svg>
+              Sign up with Google
+            </button>
             <p class="auth-switch">Already have an account? <button type="button" class="auth-text-button" :disabled="loading" @click="authTab='login'; authMsg=''">Sign in</button></p>
           </form>
           <div class="auth-footnote">A peaceful stay starts with peace of mind. <a href="privacy.html" target="_blank" rel="noopener">Privacy policy<span class="auth-sr-only"> (opens in a new tab)</span></a></div>
