@@ -287,6 +287,9 @@ def register():
 def google_login():
     try:
         data = request.get_json(silent=True) or {}
+        mode = data.get('mode', 'login')
+        if mode not in ('login', 'register'):
+            return jsonify(error='Choose Google sign in or account creation.'), 400
         access_token = data.get('access_token')
         if not isinstance(access_token, str) or not access_token or len(access_token) > 4096:
             return jsonify({'error': 'A valid Google sign-in token is required.'}), 401
@@ -313,6 +316,13 @@ def google_login():
             return jsonify(error='Google sign-in is temporarily unavailable.'), 503
         user = users[0] if users else None
 
+        if not user and mode == 'login':
+            return jsonify(error='No account exists for this Google email. Choose Sign up with Google to create one.',
+                           code='GOOGLE_REGISTRATION_REQUIRED'), 404
+        if user and mode == 'register':
+            return jsonify(error='An account already exists for this Google email. Please sign in instead.',
+                           code='GOOGLE_ACCOUNT_EXISTS'), 409
+
         if not user:
             user_data = {
                 'name': name,
@@ -323,6 +333,9 @@ def google_login():
             }
             user = supabase_req('users', method='POST', data=user_data)
             if isinstance(user, list): user = user[0]
+
+        if not user:
+            return jsonify(error='Google account creation is temporarily unavailable.'), 503
 
         token = create_access_token(identity=str(user.get('id')))
         return jsonify({'token': token, 'user': public_user(user)}), 200

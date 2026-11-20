@@ -1028,7 +1028,8 @@ const __app = createApp({
     // ── AUTH ───────────────────────────────────────────────────────────────────
     const GOOGLE_CLIENT_ID = '549203417668-bl1k05ionrenlhnukkui7b6hka24rbbe.apps.googleusercontent.com';
 
-    function googleLogin() {
+    function googleLogin(mode = 'login') {
+      if (loading.value || loginSuccessVisible.value) return;
       if (!window.google || !window.google.accounts) {
         authMsg.value = 'Google services not loaded. Please refresh the page and try again.';
         authMsgType.value = 'error';
@@ -1065,12 +1066,15 @@ const __app = createApp({
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                access_token: tokenResponse.access_token
+                access_token: tokenResponse.access_token,
+                mode
               })
             });
             const data = await backendRes.json();
             
             if (!backendRes.ok) { 
+              if (data.code === 'GOOGLE_REGISTRATION_REQUIRED') authTab.value = 'register';
+              if (data.code === 'GOOGLE_ACCOUNT_EXISTS') authTab.value = 'login';
               authMsg.value = data.error || 'Google login failed'; 
               authMsgType.value = 'error';
               authMsgKey.value++;
